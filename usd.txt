@@ -1,0 +1,1975 @@
+#import "user32.dll" // Get window dimensions (x,y -> x,y)
+int MessageBoxA(int Ignore, string Caption, string Title, int Icon);
+#import
+#import "shell32.dll"
+int ShellExecuteW(int hwnd, string operation, string file, string parameters, string directory, int showCmd);
+#import
+//extern 
+double lot;
+extern int MyMa;
+extern int MyHs;
+extern int MyC;
+int MAs[] = {
+    2,
+    3,
+    5,
+    8,
+    13,
+    21,
+};
+int HSs[] = {
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+};
+int Cs[] = {
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+};
+double Risk = 1;
+/********************************************************************
+ * Socket definitions                                       *
+ ********************************************************************/
+string GTM[];
+string ButtonName = "View";
+double pip, HenikenOpen, HenikenClose, Fibo161Buy, Fibo161Sell, CompareGMT;
+string commentBuy, commentSell, symbol = Symbol();
+double conditionBuy[9];
+double conditionSell[9];
+double minHL, OC = 0, minOC;
+double IchiMokuUpTenKanKiJunH1, IchiMokuDownTenKanKiJunH1, IchiMokuDownD1, IchiMokuUpD1, IchiMokuDownH1, IchiMokuUpH1, TopBottom0D1, TopBottom1D1, IchiMokuUpH4, IchiMokuDownH4;
+int ModifyBuyFiBo100, ModifySellFiBo100, DB;
+datetime HourBuy, HourSell, AccountLiveTime;
+double ATR;
+int OnInit() {
+    //printf("pin " +  iCustom(NULL, 0, "MyZigZag", 5, 5, 3," 2020.02.07 00:00", 3, 0) );
+    string Strategy = "Strategy";
+    ObjectCreate(Strategy, OBJ_LABEL, 0, 0, 0, 0);
+    //////////////////////////////////////////////
+    ObjectSet(Strategy, OBJPROP_XDISTANCE, 400);
+    ObjectSet(Strategy, OBJPROP_YDISTANCE, 30);
+    ObjectSetText(Strategy, "Developer: Nam Nguyen: namnb.hcm@gmail.com", 10, "Arial", Yellow);
+    if (IsTesting()) {
+        if (FileIsExist("Backtest_Done.txt")) {
+            FileDelete("Backtest_Done.txt"); // lúc ch?y real thì ph?i b? l?nh này do ko l?p l?i quá kh?
+        }
+        ObjectSetText(Strategy, "", 10, "Arial", Yellow);
+    }
+    //else{
+    //}
+    if (!TerminalInfoInteger(TERMINAL_DLLS_ALLOWED) || !IsTradeAllowed() || Period() != 1440) {
+        Alert(" Please Allow DLL Imports! Or TimeFrame Daily");
+        printf(" Please Allow DLL Imports! Or TimeFrame Daily");
+        ObjectSetText(Strategy, "Please Allow DLL Imports! Or TimeFrame Daily", 10, "Arial", Yellow);
+    }
+    //FileDelete(symbol + ".csv");
+    //ArrayResize(array, 100000, 100000);
+    int TotalBar = iBars(NULL, PERIOD_D1);
+    if ((int) MarketInfo(NULL, MODE_DIGITS) % 2 == 1) // sàn 5 s?
+    {
+        pip = MarketInfo(NULL, MODE_POINT) * 10;
+    } else {
+        pip = MarketInfo(NULL, MODE_POINT);
+    }
+    ATR = FindATR() * pip;
+    symbol = Symbol();
+    //printf("ecist "+  FileIsExist(TerminalPath()+"\\tester\\files\\"+symbol+".txt"));
+    if (IsTesting() && FileIsExist(symbol + "backtest.csv") && (MyMa == 0 || (MyMa == 2 && MyHs == 0)))
+        FileDelete(symbol + "backtest.csv");
+    StringSplit((string)(TimeToStr(TimeCurrent() - TimeGMT(), TIME_DATE | TIME_SECONDS)), StringGetCharacter(" ", 0), GTM);
+    if (TimeMinute(StrToTime(GTM[1])) > 50)
+        GTM[0] = TimeHour(StrToTime(GTM[1])) + 1;
+    else GTM[0] = TimeHour(StrToTime(GTM[1]));
+    if (GTM[0] == "01") CompareGMT = -120;
+    else if (GTM[0] == "02") CompareGMT = -60;
+    else if (GTM[0] == "03") CompareGMT = 0;
+    else if (GTM[0] == "04") CompareGMT = 60;
+    else if (GTM[0] == "05") CompareGMT = 120;
+    else if (GTM[0] == "06") CompareGMT = 180;
+    else if (GTM[0] == "07") CompareGMT = 240;
+    else if (GTM[0] == "08") CompareGMT = 300;
+    printf("Start " + Symbol() + " at " + TimeToStr(TimeCurrent(), TIME_DATE | TIME_SECONDS) + " with GMT+ " + GTM[0]);
+    printf("Risk " + Risk);
+    printf("Account Leverage " + AccountLeverage());
+    printf(Symbol() + " iATR(NULL, 240, 10, 1)  " + iATR(NULL, 240, 10, 1));
+    printf(Symbol() + " iATR(NULL, 43200, 10, 1)  " + iATR(NULL, 43200, 10, 1));
+    printf(Symbol() + " iATR(NULL, 10080, 10, 1)  " + iATR(NULL, 10080, 10, 1));
+    printf(Symbol() + " iATR(NULL, 1440, 10, 1)  " + iATR(NULL, 1440, 10, 1));
+    if (iATR(NULL, 43200, 20, 1) == 0 || iATR(NULL, 10080, 20, 1) == 0 || iATR(NULL, 1440, 20, 1) == 0 || iATR(NULL, 240, 20, 1) == 0) {
+        MessageBoxA(0, "R", "P", 0);
+        Alert("Please Prepare All TimeFrame " + Symbol());
+        MessageBox("Prepare", "", 0);
+        ExpertRemove();
+    }
+    for (int i = 0; i < ArraySize(crossed); i++)
+        crossed[i] = true;
+    DeleteAllObjects();
+    //DrawVerticalLine("usd", 50, clrRed);
+    //CloseAllOder();
+    AccountLiveTime = StrToTime("2021.09.25");
+    if ((TimeCurrent() - AccountLiveTime) > 0) {
+        SendNotification("Expiration");
+        Alert("Expiration");
+        printf("Expiration");
+        ExpertRemove();
+        //WriteNewFile("Backtest_Done", "Backtest_Done");
+        return (INIT_FAILED);
+    }
+    if (!IsTesting())
+        EventSetTimer(1);
+    if (MyMa > 0) {
+        MyHs = MyHs + 2;
+        MyC = MyC + 2;
+        printf("MyMa " + MyMa + "MyHs " + MyHs + "MyC " + MyC);
+    }
+    //if (GlobalVariableCheck(Symbol() + "_BuyHS")) {
+    //    if (TimeToStr(GlobalVariableTime((Symbol() + "_BuyHS")), TIME_DATE) != TimeToStr(iTime(NULL, 0, 1), TIME_DATE))
+    //        GlobalVariableDel(Symbol() + "_BuyHS");
+    //}
+    GlobalVariablesDeleteAll();
+    if (!IsTesting()) {
+        CreatTextbox();
+        CreateButtons();
+    }
+    return (INIT_SUCCEEDED);
+}
+//double TotalMA[], ClosePriceHenikenBar1[], OpenPriceHenikenBar1[];
+void OnTick() {
+    RefreshRates();
+    //usd();
+    //if (MyMa > 0) {
+    //  Backtest(MyMa, MyHs, MyC);
+    //}
+    money();
+}
+void money() {
+    if (!IsTesting())
+        if (Hour() == 20 && Minute() == 0)
+            DeleteAllObjects();
+    int CountToTalOrder = 0, LimitOrderForEachSymBol = 0, CheckOrderForEachSymBol = 0;
+    int OrderBuy, OrderSell, OrderTotal = OrdersTotal(), OrdersHistory = OrdersHistoryTotal();
+    datetime today = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+    for (int a = 0; a < OrderTotal; a++) {
+        if (OrderSelect(a, SELECT_BY_POS, MODE_TRADES)) {
+            //TotalLot += OrderLots() 
+            double FiboW1;
+            string array[];
+            StringSplit(OrderComment(), StringGetCharacter(",", 0), array);
+            double TopH4 = array[0];
+            double BottomH4 = array[1];
+            int r;
+            CountToTalOrder++;
+            if (OrderSymbol() == symbol) {
+                LimitOrderForEachSymBol++;
+                if (LimitOrderForEachSymBol >= 1 && StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)) == today) {
+                    CheckOrderForEachSymBol = 1;
+                    //printf("StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)) "+StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)));
+                    //printf("today "+today);
+                }
+                if (OrderMagicNumber() == 1) // 1 c?p ch? vào 1 l?nh
+                {
+                    //printf("Order "+OrderComment());
+                    if (OrderType() == OP_BUY) {
+                        int OrderCloseBuy;
+                        //if(OrderProfit()<0 && MathAbs(OrderProfit())> NormalizeDouble(Risk * AccountBalance() / 100, Digits))
+                        //OrderCloseBuy = OrderClose(OrderTicket(), OrderLots(), Bid, 30 * pip, White);
+                        // if (OrderStopLoss() == NormalizeDouble((OrderOpenPrice() + 0 * pip), Digits)) {
+                        if (OrderStopLoss() != NormalizeDouble((OrderOpenPrice() + 0 * pip), Digits)) {
+                            if (NormalizeDouble(4 * (OrderOpenPrice() - OrderStopLoss()), Digits) <= NormalizeDouble((Ask - OrderOpenPrice()), Digits))
+                                int ModifyBuy = OrderModify(OrderTicket(), OrderOpenPrice(), (OrderOpenPrice() + 0 * pip), NULL, NULL, NULL);
+                        } else {
+                            for (r = 0; r <= 10; r++) {
+                                FiboW1 = GetFibExpansion(0, TopH4, BottomH4, 0.618 + r);
+                                //printf("FiboW " + FiboW1);
+                                if (r == 10) FiboW1 = GetFibExpansion(0, TopH4, BottomH4, 1);
+                                // if (FiboW1 < TopH4) continue;
+                                if (iHigh(NULL, 240, 1) > FiboW1 && iClose(NULL, 240, 1) <= FiboW1 && iClose(NULL, 240, 1) > iOpen(NULL, 240, 1)) {
+                                    //OrderCloseBuy = OrderClose(OrderTicket(), OrderLots(), Bid, 30 * pip, White);
+                                    //printf(FiboW1);
+                                    //break;
+                                } else if (iHigh(NULL, 240, 1) > FiboW1 && iClose(NULL, 240, 1) > FiboW1 && iCustom(NULL, 240, "MyZigZag", 12, 5, 3, 3, 0) < iCustom(NULL, 240, "MyZigZag", 12, 5, 3, 3, 1)) {
+                                    if (OrderProfit() > 0) {
+                                        OrderCloseBuy = OrderClose(OrderTicket(), OrderLots(), Bid, 30 * pip, White);
+                                        printf(r + " " + FiboW1);
+                                        printf("Buy 2");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (OrderType() == OP_SELL) {
+                        int OrderCloseSell;
+                        //if(OrderProfit()<0 && MathAbs(OrderProfit())> NormalizeDouble(Risk * AccountBalance() / 100, Digits))
+                        //OrderCloseSell = OrderClose(OrderTicket(), OrderLots(), Ask, 30 * pip, White);
+                        //
+                        if (OrderStopLoss() != NormalizeDouble((OrderOpenPrice() - 0 * pip), Digits)) {
+                            if (NormalizeDouble(4 * (OrderStopLoss() - OrderOpenPrice()), Digits) <= NormalizeDouble((OrderOpenPrice() - Bid), Digits))
+                                int ModifySell = OrderModify(OrderTicket(), OrderOpenPrice(), (OrderOpenPrice() - 0 * pip), NULL, NULL, NULL);
+                        } else {
+                            for (r = 0; r <= 10; r++) {
+                                FiboW1 = GetFibExpansion(1, TopH4, BottomH4, 0.618 + r);
+                                if (r == 10) FiboW1 = GetFibExpansion(1, TopH4, BottomH4, 1);
+                                //if (FiboW1 > BottomH4) continue;
+                                if (iLow(NULL, 240, 1) < FiboW1 && iClose(NULL, 240, 1) >= FiboW1 && iClose(NULL, 240, 1) < iOpen(NULL, 240, 1)) {
+                                    //OrderCloseSell = OrderClose(OrderTicket(), OrderLots(), Ask, 30 * pip, White);
+                                    //printf("iLow(NULL, 240, 1)  "+iLow(NULL, 240, 1) );
+                                    //printf(r+" "+FiboW1 );
+                                    //printf("1");
+                                    //break;
+                                } else if (iLow(NULL, 240, 1) < FiboW1 && iClose(NULL, 240, 1) < FiboW1 && iCustom(NULL, 240, "MyZigZag", 12, 5, 3, 3, 0) > iCustom(NULL, 240, "MyZigZag", 12, 5, 3, 3, 1)) {
+                                    if (OrderProfit() > 0) {
+                                        OrderCloseSell = OrderClose(OrderTicket(), OrderLots(), Ask, 30 * pip, White);
+                                        printf(r + " " + FiboW1);
+                                        printf("Sell 2");
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    int GetFirst15Orders = 0;
+    for (int b = OrdersHistory - 1; b >= 0; b--) { //
+        GetFirst15Orders++;
+        if (GetFirst15Orders > 15)
+            break;
+        if (OrderSelect(b, SELECT_BY_POS, MODE_HISTORY)) {
+            if ((string) OrderSymbol() == symbol && StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)) == today && OrderMagicNumber() == 1) // 1 c?p ch? vào 1 l?nh
+            {
+                // if (lastestordertime < orderclosetime()) lastestordertime = orderclosetime();            
+                CheckOrderForEachSymBol = 1;
+                //   printf("history "+StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)));
+                break;
+            }
+        }
+    }
+    if (CheckOrderForEachSymBol)
+        return;
+    //printf(TimeToStr(TimeCurrent(), TIME_DATE));
+    ////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////
+    ////////////////////////////////////////////////////////////////
+    lot = 0.01;
+    // double conditionBuyMA[59];
+    // double conditionBuyHS[19];
+    //double conditionSellMA[59];
+    // double conditionSellHS[19];
+    //ArrayResize(conditionBuyMA, 59, 59);
+    // ArrayResize(conditionBuyHS, 19, 19);
+    // ArrayResize(conditionSellMA, 59, 59);
+    // ArrayResize(conditionSellHS, 19, 19);
+    int checkconditionBuyHS = 0, checkconditionSellHS = 0, checkconditionBuyMA = 0;
+    double LowPrice1 = iLow(NULL, 0, 1);
+    double HighPrice1 = iHigh(NULL, 0, 1);
+    double OpenPrice1 = iOpen(NULL, 0, 1);
+    double ClosePrice1 = iClose(NULL, 0, 1);
+    double LowPrice2 = iLow(NULL, 0, 2);
+    double HighPrice2 = iHigh(NULL, 0, 2);
+    double OpenPrice2 = iOpen(NULL, 0, 2);
+    double ClosePrice2 = iClose(NULL, 0, 2);
+    if (split(GlobalVariableGet(Symbol() + "_BuyMA"), ".", 0) != TimeYear(TimeCurrent()) + "" + TimeMonth(TimeCurrent()) + "" + TimeDay(TimeCurrent()))
+        GlobalVariableDel(Symbol() + "_BuyHS");
+    //  GlobalVariableGet(Symbol() + "_BuyHS");
+    if (split(GlobalVariableGet(Symbol() + "_BuyMA"), ".", 0) != TimeYear(TimeCurrent()) + "" + TimeMonth(TimeCurrent()) + "" + TimeDay(TimeCurrent()))
+        GlobalVariableDel(Symbol() + "_SellHS");
+    //  GlobalVariableGet(Symbol() + "_SellHS");
+    if (split(GlobalVariableGet(Symbol() + "_BuyMA"), ".", 0) != TimeYear(TimeCurrent()) + "" + TimeMonth(TimeCurrent()) + "" + TimeDay(TimeCurrent()))
+        GlobalVariableDel(Symbol() + "_BuyMA");
+    //  GlobalVariableGet(Symbol() + "_BuyMA");
+    if (GlobalVariableCheck(Symbol() + "_BuyMA") == 0) {
+        for (int w = 0; w < 59; w++) { //ArraySize(TotalMA)
+            // ArrayResize(TotalMA, w, 59);
+            double MA = NormalizeDouble(iMA(NULL, 0, w + 2, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+            //printf( TotalMA[w] );
+            if (LowPrice1 < MA && MA < HighPrice1) {
+                // conditionBuyMA[t] = true;
+                checkconditionBuyMA++;
+                // if (checkconditionBuyMA > 15)
+                //  break;
+            }
+        }
+        //printf("checkconditionBuyMA "+checkconditionBuyMA);
+        GlobalVariableSet(Symbol() + "_BuyMA", TimeYear(TimeCurrent()) + "" + TimeMonth(TimeCurrent()) + "" + TimeDay(TimeCurrent()) + "." + checkconditionBuyMA);
+    }
+    if (GlobalVariableCheck(Symbol() + "_BuyHS") == 0 || GlobalVariableCheck(Symbol() + "_SellHS") == 0) {
+        for (int q = 0; q < 59; q++) { // ArraySize(ClosePriceHenikenBar1)
+            //ArrayResize(ClosePriceHenikenBar1, q, 19);
+            //ArrayResize(OpenPriceHenikenBar1, q, 19);
+            double ClosePriceHenikenBar1 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, q + 2, 2, 1, 3, 1), Digits);
+            double OpenPriceHenikenBar1 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, q + 2, 2, 1, 2, 1), Digits);
+            if (OpenPriceHenikenBar1 < ClosePriceHenikenBar1) {
+                //conditionBuyHS[y] = true;
+                checkconditionBuyHS++;
+            } else {
+                //conditionSellHS[y] = true;
+                checkconditionSellHS++;
+            }
+            if (checkconditionBuyHS > 0 && checkconditionSellHS > 0) {
+                break;
+            }
+        }
+        //printf("checkconditionBuyHS "+checkconditionBuyHS);
+        GlobalVariableSet(Symbol() + "_BuyHS", TimeYear(TimeCurrent()) + "" + TimeMonth(TimeCurrent()) + "" + TimeDay(TimeCurrent()) + "." + checkconditionBuyHS);
+        GlobalVariableSet(Symbol() + "_SellHS", TimeYear(TimeCurrent()) + "" + TimeMonth(TimeCurrent()) + "" + TimeDay(TimeCurrent()) + "." + checkconditionSellHS);
+    }
+    checkconditionBuyMA = split(GlobalVariableGet(Symbol() + "_BuyMA"), ".", 1);
+    checkconditionBuyHS = split(GlobalVariableGet(Symbol() + "_BuyHS"), ".", 1);
+    checkconditionSellHS = split(GlobalVariableGet(Symbol() + "_SellHS"), ".", 1);
+    //printf("checkconditionBuyMA+ "+checkconditionBuyMA);
+    string CommentBuy = "", CommentSell = "";
+    double StopLoss, TakeProfit;
+    double IchiMokuUp = FindIchiMoku(1, 0); // gi?i mây trên
+    double IchiMokuDown = FindIchiMoku(0, 0); // gi?i mây d??i
+    //double TopBottom0 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 0), Digits);
+    // double TopBottom1 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 1), Digits);
+    // double TopBottom2 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 2), Digits);
+    // double TopBottom3 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 3), Digits);
+    //double TopBottom4 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 4), Digits);
+    // double TopBottom5 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 5), Digits);
+    // double TopBottom6 = NormalizeDouble(iCustom(NULL, 0, "MyZigZag", 5, 5, 3, 3, 6), Digits);
+    //string TopBottom=TopBottom0+ "," +TopBottom1 + "," +TopBottom2+ "," +TopBottom3 + "," +TopBottom4;// + "," +TopBottom5+ "," +TopBottom6;
+    //printf(TopBottom);
+    double TopBottom0H4 = NormalizeDouble(iCustom(NULL, 240, "MyZigZag", 5, 5, 3, 3, 0), Digits);
+    double TopBottom1H4 = NormalizeDouble(iCustom(NULL, 240, "MyZigZag", 5, 5, 3, 3, 1), Digits);
+    double TopBottom2H4 = NormalizeDouble(iCustom(NULL, 240, "MyZigZag", 5, 5, 3, 3, 2), Digits);
+    double TopBottom3H4 = NormalizeDouble(iCustom(NULL, 240, "MyZigZag", 5, 5, 3, 3, 3), Digits);
+    double TopBottom4H4 = NormalizeDouble(iCustom(NULL, 240, "MyZigZag", 5, 5, 3, 3, 4), Digits);
+    double Elliott0, Elliott1, Elliott2;
+
+
+
+    //TopBottom1H1 > (TopBottom2H1 - 38.2 * MathAbs(TopBottom3H1 - TopBottom2H1) / 100)) return;
+    //TopBottom1H1 < (TopBottom2H1 - 50 * MathAbs(TopBottom3H1 - TopBottom2H1) / 100)) return;
+    //double TopMaxH4 = MathMax(MathMax(TopBottom2H4, TopBottom1H4), TopBottom0H4);
+    //double BottomMinH4 = MathMin(MathMin(TopBottom0H4, TopBottom1H4), TopBottom2H4);
+    //double body1 = NormalizeDouble(MathAbs(OpenPrice1 - ClosePrice1) / pip, 2);
+    double highlow1 = NormalizeDouble(MathAbs(HighPrice1 - LowPrice1) / pip, 2);
+    double ichimoku = 1;
+    double spread = MarketInfo(NULL, MODE_SPREAD) * pip;
+    if (spread > 5 * pip)
+        spread = 5 * pip;
+    ATR = NormalizeDouble(iATR(NULL, 0, 20, 1), Digits);
+    double ATR5 = NormalizeDouble(1.382 * iATR(NULL, 0, 5, 1) / pip, 2);
+    if (Ask <= IchiMokuUp && Bid >= IchiMokuDown)
+        ichimoku = 0; // in ichimoku
+    else
+        ichimoku = 1;
+    //if (TopMaxH4 == TopBottom0H4) TopMaxH4 = TopBottom2H4;
+    //if (BottomMinH4 == TopBottom0H4) BottomMinH4 = TopBottom2H4;
+    //printf(" ATR5 "+ATR5);
+    //printf("  highlow1 "+ highlow1);
+    //MessageBoxTest("1");
+    if (OpenPrice1 < ClosePrice1 && checkconditionBuyMA > 3 && checkconditionBuyHS > 20 && highlow1 < ATR5) { //* iATR(NULL, 0, 20, 1) && (HighPrice1 - TopMaxH4) <= iATR(NULL, 240, 20, 1)
+        CommentBuy = checkconditionBuyMA + "," + checkconditionBuyHS + "," + ichimoku; // TopMaxH4 + "," + BottomMinH4 + "," + 
+        //if( Ask<=IchiMokuDown || Bid>=IchiMokuUp )
+        // printf("ClosePrice1 "+ClosePrice1);
+        // printf("ask "+Ask);
+
+        if (Ask > ClosePrice1 && (Ask - ClosePrice1) < spread && MathAbs(Ask - iLow(NULL, 43200, 0)) < NormalizeDouble(5 * iATR(NULL, 43200, 10, 1) / 6, Digits)) { //(TimeCurrent() - iTime(NULL, 0, 0)) / 1800 < 1 &&
+            if (TopBottom0H4 > TopBottom1H4) {
+                Elliott2 = TopBottom1H4;
+                Elliott1 = TopBottom2H4;
+                Elliott0 = TopBottom3H4;
+                //  printf("E1");
+            } else if (TopBottom0H4 < TopBottom1H4) {
+                Elliott2 = TopBottom0H4;
+                Elliott1 = TopBottom1H4;
+                Elliott0 = TopBottom2H4;
+                //printf("È2");
+            }
+            //Elliott0 is Bottom
+            if (Elliott2 > (Elliott0 + 23.6 * MathAbs(Elliott1 - Elliott0) / 100) && Elliott2 < (Elliott0 + 50 * MathAbs(Elliott1 - Elliott0) / 100))
+                if (((LowPrice2 < LowPrice1) || (HighPrice2 < HighPrice1))) { // Candle power
+                    StopLoss = FindSL(0, 10);
+                    if (StopLoss != 0) {
+                        lot = NormalizeDouble(FindLot(MathAbs(Ask - StopLoss), 0), Digits);
+                        //if (FindBBHighLow(60, 240, 0) > 0)
+                        if (FindRecentCandle_Pressure(0, 10) == 0)
+                            OrderBuy = OrderSend(NULL, 0, lot, Ask, 3, StopLoss, NormalizeDouble(Ask + 1 * (Ask - StopLoss), Digits), CommentBuy, 1);
+                    }
+                }
+
+
+        }
+        if (OrderBuy > 0) {
+            printf("CommentBuy " + CommentBuy);
+            printf("checkconditionBuyMA " + checkconditionBuyMA);
+            printf("  ATR5  " + ATR5);
+            printf("highlow1 " + highlow1);
+        }
+        //DrawVerticalLine(iTime(NULL, 0, 1) + "_Buy ", 1, clrBlue, true, NULL);
+        //printf(CommentBuy);
+    }
+    if (OpenPrice1 > ClosePrice1 && checkconditionBuyMA > 3 && checkconditionSellHS > 20 && highlow1 < ATR5) { //iATR(NULL, 0, 20, 1) && (BottomMinH4 - LowPrice1) <= iATR(NULL, 240, 20, 1)
+        CommentSell = checkconditionBuyMA + "," + checkconditionSellHS + "," + ichimoku; //TopMaxH4 + "," + BottomMinH4 + "," +
+        //if( Ask<=IchiMokuDown || Bid>=IchiMokuUp )
+        if (Bid < ClosePrice1 && (ClosePrice1 - Bid) < spread && MathAbs(iHigh(NULL, 1440, 0) - Bid) < NormalizeDouble(5 * iATR(NULL, 43200, 10, 1) / 6, Digits)) { //(TimeCurrent() - iTime(NULL, 0, 0)) / 1800 < 1 &&
+            //|| FindCandle_Pressure(1, 2) > 0) && FindCandle_Pressure(0, 1) <= 1
+if (TopBottom0H4 > TopBottom1H4) {
+                Elliott2 = TopBottom0H4;
+                Elliott1 = TopBottom1H4;
+                Elliott0 = TopBottom2H4;
+                //  printf("E1");
+            } else if (TopBottom0H4 < TopBottom1H4) {
+                Elliott2 = TopBottom1H4;
+                Elliott1 = TopBottom2H4;
+                Elliott0 = TopBottom3H4;
+                //printf("È2");
+            }
+            //Elliott0 is Top
+           //printf("Elliott2 "+Elliott2);
+           //printf("Elliott1 "+Elliott1);
+           //printf("Elliott0 "+Elliott0);
+           //printf("Elliott2 < (Elliott0 - 23.6 * MathAbs(Elliott1 - Elliott0) / 100) "+(Elliott2 < (Elliott0 - 23.6 * MathAbs(Elliott1 - Elliott0) / 100)));
+            if (Elliott2 < (Elliott0 - 23.6 * MathAbs(Elliott1 - Elliott0) / 100) && Elliott2 > (Elliott0 - 50 * MathAbs(Elliott1 - Elliott0) / 100))
+           
+            if (((LowPrice2 > LowPrice1) || (HighPrice2 > HighPrice1))) { // Candle power //&& (FindCandle_Pressure(1, 1) > 0
+                StopLoss = FindSL(1, 10);
+                //TakeProfit = NormalizeDouble(Bid - (StopLoss - Bid) * SL_TP, Digits);
+                if (StopLoss != 0) {
+                    lot = NormalizeDouble(FindLot(MathAbs(StopLoss - Bid), 1), Digits);
+                    //if (FindBBHighLow(60, 240, 1) > 0) //h4
+                    if (FindRecentCandle_Pressure(1, 10) == 1)
+                        OrderSell = OrderSend(NULL, 1, lot, Bid, 3, StopLoss, NormalizeDouble(Bid - 1 * (StopLoss - Bid), Digits), CommentSell, 1);
+                }
+
+
+            }
+
+        }
+        //printf("OrderSell " + OrderSell);
+        if (OrderSell > 0) {
+            printf(" ATR5  " + ATR5);
+            printf("highlow1 " + highlow1);
+            printf("CommentSell " + CommentSell);
+            printf(" checkconditionBuyMA " + checkconditionBuyMA);
+        }
+        //DrawVerticalLine(iTime(NULL, 0, 1) + "_Sell ", 1, clrRed, NULL, true);
+        // MessageBoxTest("2");
+        //printf(CommentSell);
+    }
+}
+
+int FindBBHighLow(int TotalBar, int timeframe, int MyOrderType) {
+    for (int i = 0; i < TotalBar; i++) {
+        double lowprice = iLow(NULL, timeframe, i);
+        double highprice = iHigh(NULL, timeframe, i);
+        double LowBB = iBands(NULL, timeframe, 20, 2, 0, PRICE_CLOSE, MODE_LOWER, i);
+        double HighBB = iBands(NULL, timeframe, 20, 2, 0, PRICE_CLOSE, MODE_UPPER, i); // dont have MODE_HIGHER
+        if (MyOrderType == 0) {
+            if (lowprice < LowBB && highprice > LowBB)
+                return i;
+            if (lowprice < HighBB && highprice > HighBB)
+                return 0;
+        }
+        if (MyOrderType == 1) {
+            if (lowprice < LowBB && highprice > LowBB)
+                return 0;
+            if (lowprice < HighBB && highprice > HighBB)
+                return i;
+        }
+    }
+    return 0;
+
+}
+int FindRecentCandle_Pressure(int MyOrderType, int Bar) {
+    int i;
+    if (MyOrderType == 0) {
+        for (i = Bar; i > 0; i--) { // 
+            int checkconditionBuy = 0;
+            if (FindCandle_Pressure(0, i) > 1)
+                checkconditionBuy = i;
+            if (checkconditionBuy > 0) {
+                printf("checkconditionBuy " + checkconditionBuy);
+                bool checkconditionSellRevert = true;
+                for (int j = checkconditionBuy; j > 0; j--) // 
+                {
+                    if (FindCandle_Pressure(1, j) > 1) {
+                        checkconditionSellRevert = false;
+                        break;
+                    }
+                }
+                if (checkconditionSellRevert)
+                    return 0;
+            }
+        }
+    }
+    if (MyOrderType == 1) {
+        for (i = Bar; i > 0; i--) { // 
+            int checkconditionSell = 0;
+            if (FindCandle_Pressure(1, i) > 1)
+                checkconditionSell = i;
+            if (checkconditionSell > 0) {
+                printf("checkconditionSell " + checkconditionSell);
+                bool checkconditionBuyRevert = true;
+                for (int k = checkconditionSell; k > 0; k--) // 
+                {
+                    if (FindCandle_Pressure(0, k) > 1) {
+                        //  printf("FindCandle_Pressure(0, k)"+k+" " + FindCandle_Pressure(0, k));
+                        checkconditionBuyRevert = false;
+                        break;
+                    }
+                }
+                if (checkconditionBuyRevert)
+                    return 1;
+            }
+        }
+    }
+    return 3;
+}
+double FindSL(int MyOrderType, int Bar) {
+    double MyAtr, StopLoss;
+    MyAtr = NormalizeDouble(1.382 * iATR(NULL, 0, Bar, 1), Digits);
+    int i;
+    double HighestBar = iHighest(NULL, 0, MODE_HIGH, 10, 0);
+    //printf(" HighestBar " + HighestBar);
+    double LowestBar = iLowest(NULL, 0, MODE_LOW, 10, 0);
+    if (MyOrderType == 0) {
+        if (FindCandle_Pressure(1, HighestBar, true) <= 1)
+            for (i = Bar; i >= 0; i--) // 
+        {
+            StopLoss = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, i + 1, 0));
+            //printf("i " + i + " StopLoss " + StopLoss + " Bid - StopLoss " + (Bid - StopLoss) + "  MyAtr " +  MyAtr);
+            if ((Bid - StopLoss) <= MyAtr) {
+                if (iLow(NULL, 0, 0) == StopLoss) {
+                    if (iLow(NULL, 0, 0) < iLow(NULL, 0, 1))
+                        return NormalizeDouble(StopLoss, Digits);
+                } else
+                    return NormalizeDouble(StopLoss, Digits);
+            }
+        }
+    }
+    if (MyOrderType == 1) {
+        if (FindCandle_Pressure(0, LowestBar, true) <= 1)
+            for (i = Bar; i >= 0; i--) { //
+                StopLoss = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, i + 1, 0));
+                // printf("i " + i + " StopLoss " + StopLoss + " Bid - StopLoss " + (Bid - StopLoss) + " MyAtr " + MyAtr);
+                if ((StopLoss - Ask) <= MyAtr)
+                    if (iHigh(NULL, 0, 0) == StopLoss) {
+                        if (iHigh(NULL, 0, 0) > iHigh(NULL, 0, 1))
+                            return NormalizeDouble(StopLoss, Digits);
+                    }
+                else
+                    return NormalizeDouble(StopLoss, Digits);
+            }
+    }
+    return 0;
+}
+int FindCandle_Pressure(int MyOrderType, int Bar, bool FindSL = false) {
+    //double MyAtr = NormalizeDouble(5 * iATR(NULL, 0, 10, 1) / 6, Digits);;
+    double HighPrice = iHigh(NULL, 0, Bar);
+    double LowPrice = iLow(NULL, 0, Bar);
+    double OpenPrice = iOpen(NULL, 0, Bar);
+    double ClosePrice = iClose(NULL, 0, Bar);
+    double Body = MathAbs(OpenPrice - ClosePrice);
+    double highlow = MathAbs(HighPrice - LowPrice);
+    double UpperBoddy;
+    double LowerBoddy;
+    if (highlow == 0)
+        return 0;
+    double PresureBuy = NormalizeDouble((ClosePrice - LowPrice) / highlow, Digits);
+    double PresureSell = NormalizeDouble((HighPrice - ClosePrice) / highlow, Digits);
+    if ((HighPrice - OpenPrice) > (HighPrice - ClosePrice))
+        UpperBoddy = HighPrice - ClosePrice;
+    else
+        UpperBoddy = HighPrice - OpenPrice;
+    if ((OpenPrice - LowPrice) > (ClosePrice - LowPrice))
+        LowerBoddy = ClosePrice - LowPrice;
+    else
+        LowerBoddy = OpenPrice - LowPrice;
+    // if(LowerBoddy+ UpperBoddy+body!= highlow){
+    // Alert("Wrong candle");
+    // printf("Wrong candle");
+    // MessageBoxTest("W");
+    // }
+
+    if (MyOrderType == 0) {
+        if (!FindSL) {
+            if (PresureBuy < 0.5) {
+                return 1;
+            } else
+                return 2;
+        } else {
+            if (PresureBuy < 0.7) {
+                return 1;
+            } else
+                return 2;
+
+
+        }
+
+    }
+    if (MyOrderType == 1) {
+        if (!FindSL) {
+            if (PresureSell < 0.5) {
+                return 1;
+            } else
+                return 2;
+        } else {
+            if (PresureSell < 0.7) {
+                return 1;
+            } else
+                return 2;
+        }
+    }
+    return 0;
+}
+double FindATR() {
+    string arraySymbol[], arayATR[];
+    string MySymbol = "USDCHF,USDJPY,AUDCHF,AUDUSD,USDCAD,NZDJPY,CADJPY,CHFJPY,AUDJPY,EURUSD,GBPUSD,EURCAD,EURJPY,GBPCHF,EURAUD,GBPCAD,GBPJPY,EURNZD,GBPAUD,GBPNZD,XAUUSD";
+    string MyATR = "85,85,90,90,90,90,95,100,105,105,120,125,125,130,140,150,160,165,175,210,1960";
+    StringSplit(MyATR, StringGetCharacter(",", 0), arayATR);
+    int MySymbolLength = StringSplit(MySymbol, StringGetCharacter(",", 0), arraySymbol);
+    for (int i = 0; i < MySymbolLength; i++) {
+        // printf( array[i] );
+        if (arraySymbol[i] == Symbol())
+            return (double) arayATR[i];
+    }
+    return 0;
+}
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason) {
+    DeleteButtons();
+    EventKillTimer();
+    ObjectSetText("usd", "");
+    if (!IsTesting() || OrdersHistoryTotal() == 0)
+        return;
+    if (FileIsExist(symbol + "backtest.csv")) {
+        FileDelete(symbol + "backtest.csv"); // lúc ch?y real thì ph?i b? l?nh này do ko l?p l?i quá kh?
+    }
+    for (int b = OrdersHistoryTotal() - 1; b >= 0; b--) { ////
+        if (OrderSelect(b, SELECT_BY_POS, MODE_HISTORY)) {
+            if ((string) OrderSymbol() == symbol) //&& OrderProfit() > 0 && OrderClosePrice() == OrderTakeProfit()// 1 c?p ch? vào 1 l?nh
+            {
+                //   CommentSell = checkconditionBuyMA + "," + checkconditionSellHS+ ","+ TopBottom+ ","  + ichimoku;
+                //   CommentBuy = TopMaxH4 + "," + BottomMinH4 + "," + checkconditionBuyMA + "," +checkconditionBuyHS+ "," + body1 + ","+highlow1+ ","+ ATR+","+ichimoku;
+                string checkconditionBuyMA = split(OrderComment(), ",", 0);
+                string checkconditionHS = split(OrderComment(), ",", 1);
+                // double TopBottom0=split(OrderComment(), ",", 2);
+                //    double TopBottom1=split(OrderComment(), ",", 3);
+                //  double TopBottom2=split(OrderComment(), ",", 4);
+                // double TopBottom3=split(OrderComment(), ",", 5);
+                //double TopBottom4=split(OrderComment(), ",", 6);
+                //double TopBottom5=split(OrderComment(), ",", 7);
+                //double TopBottom6=split(OrderComment(), ",", 8);
+                //printf("OrderComment() "+checkconditionBuyMA);
+                string ichimoku = split(OrderComment(), ",", 2);
+                int BarShift1 = iBarShift(NULL, 0, OrderOpenTime()) + 1;
+                int BarShift2 = iBarShift(NULL, 0, OrderOpenTime()) + 2;
+                int BarShift3 = iBarShift(NULL, 0, OrderOpenTime()) + 3;
+                double LowPrice1 = iLow(NULL, 0, BarShift1);
+                double HighPrice1 = iHigh(NULL, 0, BarShift1);
+                double OpenPrice1 = iOpen(NULL, 0, BarShift1);
+                double ClosePrice1 = iClose(NULL, 0, BarShift1);
+                double LowPrice2 = iLow(NULL, 0, BarShift2);
+                double HighPrice2 = iHigh(NULL, 0, BarShift2);
+                double OpenPrice2 = iOpen(NULL, 0, BarShift2);
+                double ClosePrice2 = iClose(NULL, 0, BarShift2);
+                double LowPrice3 = iLow(NULL, 0, BarShift3);
+                double HighPrice3 = iHigh(NULL, 0, BarShift3);
+                double OpenPrice3 = iOpen(NULL, 0, BarShift3);
+                double ClosePrice3 = iClose(NULL, 0, BarShift3);
+                double ATR20 = NormalizeDouble(iATR(NULL, 0, 20, BarShift1) / pip, 2);
+                double ATR5 = NormalizeDouble(iATR(NULL, 0, 5, BarShift1) / pip, 2);
+                double ATR3 = NormalizeDouble(iATR(NULL, 0, 3, BarShift1) / pip, 2);
+                double ATRMN20 = NormalizeDouble(iATR(NULL, 43200, 20, BarShift1) / pip, 2);
+                double ATRMN5 = NormalizeDouble(iATR(NULL, 43200, 5, BarShift1) / pip, 2);
+                double ATRMN3 = NormalizeDouble(iATR(NULL, 43200, 3, BarShift1) / pip, 2);
+                double BestPrice = 0;
+                double TopBottom0 = iCustom(NULL, 0, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 0);
+                double TopBottom1 = iCustom(NULL, 0, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 1);
+                double TopBottom2 = iCustom(NULL, 0, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 2);
+                double TopBottom3 = iCustom(NULL, 0, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 3);
+                double TopBottom4 = iCustom(NULL, 0, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 4);
+
+                double TopBottom0H4 = iCustom(NULL, 240, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 0);
+                double TopBottom1H4 = iCustom(NULL, 240, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 1);
+                double TopBottom2H4 = iCustom(NULL, 240, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 2);
+                double TopBottom3H4 = iCustom(NULL, 240, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 3);
+                double TopBottom4H4 = iCustom(NULL, 240, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 4);
+
+                double TopBottom0H1 = iCustom(NULL, 60, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 0);
+                double TopBottom1H1 = iCustom(NULL, 60, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 1);
+                double TopBottom2H1 = iCustom(NULL, 60, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 2);
+                double TopBottom3H1 = iCustom(NULL, 60, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 3);
+                double TopBottom4H1 = iCustom(NULL, 60, "MyZigZag", 5, 5, 3, TimeToStr(OrderOpenTime()), 3, 4);
+                string TotalTopBottom = TopBottom0 + "," + TopBottom1 + "," + TopBottom2 + "," + TopBottom3 + "," + TopBottom4 + "," + TopBottom0H4 + "," + TopBottom1H4 + "," + TopBottom2H4 + "," + TopBottom3H4 + "," + TopBottom4H4; //+ "," + TopBottom0H1 + "," + TopBottom1H1 + "," + TopBottom2H1 + "," + TopBottom3H1 + "," + TopBottom4H1;
+                // printf("TopBottom0 "+TopBottom0);
+                //printf("TotalTopBottom "+TotalTopBottom);
+                if (OrderProfit() < 0)
+                    if (OrderType() == 0)
+                        BestPrice = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, iBarShift(NULL, 0, OrderOpenTime()) + 1, 0));
+                    else
+                        BestPrice = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, iBarShift(NULL, 0, OrderOpenTime()) + 1, 0));
+                string result = TimeToStr(OrderOpenTime(), TIME_DATE | TIME_MINUTES) + "," + OrderTicket() + "," + OrderType() + "," + OrderOpenPrice() + "," + OrderStopLoss() + "," + OrderTakeProfit() + "," + TimeToStr(OrderCloseTime(), TIME_DATE | TIME_MINUTES) + "," + OrderClosePrice() + "," + OrderProfit() + "," + checkconditionBuyMA + "," + checkconditionHS + "," + HighPrice1 + "," + LowPrice1 + "," + OpenPrice1 + "," + ClosePrice1 + "," + HighPrice2 + "," + LowPrice2 + "," + OpenPrice2 + "," + ClosePrice2 + "," + HighPrice3 + "," + LowPrice3 + "," + OpenPrice3 + "," + ClosePrice3 + "," + ATR20 + "," + ATR5 + "," + ATR3 + "," + ATRMN20 + "," + ATRMN5 + "," + ATRMN3 + "," + TotalTopBottom + "," + ichimoku + "," + BestPrice; //+ "," +NormalizeDouble(OrderTakeProfit()/  OrderStopLoss(),Digits)
+                //printf("result "+result);
+                // + "," + TopBottom0+ "," + TopBottom1+ "," + TopBottom2+ "," + TopBottom3+ "," + TopBottom4 +
+                WriteNewFile(symbol + "backtest.csv", result);
+            }
+        }
+    }
+    string strParameters = "/c xcopy /s /i /Y " + TerminalPath() + "\\tester\\files\\" + Symbol() + "backtest.csv " + TerminalPath() + "\\MQL4\\Files";
+    //printf(strParameters);
+    int ShellExecute = ShellExecuteW(0, "", "cmd.exe", strParameters, NULL, 1);
+    if (ShellExecute <= 32)
+        Print("Shell Execute Failed: ", result);
+    //---
+}
+void OnTimer() {
+    //datetime time = ObjectGet("usd", OBJPROP_TIME1);
+    //printf("time " + TimeToStr(time, TIME_DATE));
+    //if (time != 0)
+    //
+    //    xmlRead(symbol + "real.csv", TimeToStr(time, TIME_DATE));
+    if (FileIsExist(symbol + "backtest.csv"))
+        PrintBacktest(symbol + "backtest.csv");
+}
+int PrintBacktest(string filepath, string LineTime = NULL) {
+    int FileHandle = FileOpen(filepath, FILE_READ | FILE_TXT | FILE_ANSI);
+    string calendar = "";
+    // TimeToStr(OrderOpenTime(), TIME_DATE|TIME_MINUTES) + "," +OrderTicket()+"," + OrderType() + "," + OrderOpenPrice() + "," + OrderStopLoss() + "," + OrderTakeProfit() + "," + TimeToStr(OrderCloseTime(), TIME_DATE|TIME_MINUTES)  + "," + OrderClosePrice() + "," + OrderComment() + "," + OrderProfit();
+    if (FileHandle != INVALID_HANDLE) {
+        //--- receive the file size 
+        ulong size = FileSize(FileHandle);
+        //--- read data from the file
+        while (!FileIsEnding(FileHandle)) {
+            string line = FileReadString(FileHandle, (int) size);
+            if (line != "")
+                calendar += line + "\n";
+        }
+        string array[];
+        int CountArray = StringSplit(calendar, StringGetCharacter("\n", 0), array);
+        string MainSymbol = StringSubstr(Symbol(), 0, 3);
+        string SecondSymbol = StringSubstr(Symbol(), 3, 3);
+        string result = "";
+        bool CheckLineTime = false;
+        int OrderTotalOfUsdBar = 0;
+        for (int t = 0; t < CountArray; t++) {
+            if (array[t] == "") continue;
+            if (StringFind(array[t], "ï»¿") >= 0)
+                array[t] = StringSubstr(array[t], 3, 10000);
+            string Order[];
+            int CountOrder = StringSplit(array[t], StringGetCharacter(",", 0), Order);
+            string MyOrderOpenTime = Order[0];
+            int MyOrderTicket = Order[1];
+            int MyOrderType = Order[2];
+            double MyOrderPrice = Order[3];
+            double MyOrderStoploss = Order[4];
+            double MyOrderTakeProfit = Order[5];
+            string MyOrderCloseTime = Order[6];
+            double MyOrderClosePrice = Order[7];
+            string MyOrderComment = Order[8];
+            //printf( TimeToStr(StrToTime( MyOrderOpenTime)+86400));
+            datetime MyTime; //=StrToTime(MyOrderOpenTime) + 86400;
+            if (TimeDayOfWeek(StrToTime(MyOrderOpenTime)) == 5) {
+                MyTime = StrToTime(MyOrderOpenTime) + 86400 * 3;
+                // printf(TimeToStr(MyTime,TIME_DATE|TIME_MINUTES));
+            } else
+                MyTime = StrToTime(MyOrderOpenTime) + 86400;
+            if (MyOrderType == 0) {
+                DrawVerticalLine(MyOrderOpenTime + "_Buy ", iBarShift(NULL, 0, StrToTime(MyOrderOpenTime)), clrBlue, true, NULL);
+                DrawTrendLine(MyOrderPrice + "_Entry", StrToTime(MyOrderOpenTime), MyOrderPrice, MyTime, MyOrderPrice, false, clrYellow);
+                DrawTrendLine(MyOrderStoploss + "_SL", StrToTime(MyOrderOpenTime), MyOrderStoploss, MyTime, MyOrderStoploss, false, clrRed);
+                DrawTrendLine(MyOrderClosePrice + "_TP", StrToTime(MyOrderOpenTime), MyOrderClosePrice, MyTime, MyOrderClosePrice, false, 32768);
+            }
+            if (MyOrderType == 1) {
+                DrawVerticalLine(MyOrderOpenTime + "_Sell ", iBarShift(NULL, 0, StrToTime(MyOrderOpenTime)), clrRed, NULL, true);
+                DrawTrendLine(MyOrderPrice + "_Entry", StrToTime(MyOrderOpenTime), MyOrderPrice, MyTime, MyOrderPrice, false, clrYellow);
+                DrawTrendLine(MyOrderStoploss + "_SL", StrToTime(MyOrderOpenTime), MyOrderStoploss, MyTime, MyOrderStoploss, false, clrRed);
+                DrawTrendLine(MyOrderClosePrice + "_TP", StrToTime(MyOrderOpenTime), MyOrderClosePrice, MyTime, MyOrderClosePrice, false, 32768);
+            }
+        }
+        FileClose(FileHandle);
+    }
+    //--- check for errors   
+    else printf(" failed to open %s, Error code = %d", GetLastError());
+    //ExpertRemove();
+    return 0;
+}
+void DrawTrendLine(string name, datetime time, double price, datetime time2, double price2, bool RAY_RIGHT, color clr) {
+    if (ObjectFind(name) != -1)
+        ObjectDelete(name);
+    //return;
+    if (ObjectFind(name) == -1) {
+        ObjectCreate(0, name, OBJ_TREND, 0, time, price, time2, price2);
+        ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, RAY_RIGHT);
+        ObjectSetInteger(0, name, OBJPROP_WIDTH, 4);
+        ObjectSet(name, OBJPROP_COLOR, clr);
+    }
+}
+void arrayPush(string & arrayPush[], string dataToPush) {
+    int count = ArrayResize(arrayPush, ArraySize(arrayPush) + 1);
+    arrayPush[ArraySize(arrayPush) - 1] = dataToPush;
+}
+bool CheckWriteNewFile = true;
+int xmlRead(string filepath, string LineTime = NULL) {
+    if (CheckWriteNewFile)
+        FileDelete(symbol + "MixMax.csv");
+    int FileHandle = FileOpen(filepath, FILE_READ | FILE_TXT | FILE_ANSI);
+    string calendar = "";
+    if (FileHandle != INVALID_HANDLE) {
+        //--- receive the file size 
+        ulong size = FileSize(FileHandle);
+        //--- read data from the file
+        while (!FileIsEnding(FileHandle)) {
+            string line = FileReadString(FileHandle, (int) size);
+            if (line != "")
+                calendar += line + "\n";
+        }
+        string array[];
+        int CountArray = StringSplit(calendar, StringGetCharacter("\n", 0), array);
+        //printf(CountArray-1);
+        //Comment("OrderTotal "+len);
+        ObjectCreate("OrderTotal", OBJ_LABEL, 0, 0, 0, 0);
+        ObjectSet("OrderTotal", OBJPROP_XDISTANCE, 40);
+        ObjectSet("OrderTotal", OBJPROP_YDISTANCE, 80);
+        ObjectSetText("OrderTotal", "OrderTotal " + (CountArray - 1), 10, "Arial", Yellow);
+        string MainSymbol = StringSubstr(Symbol(), 0, 3);
+        string SecondSymbol = StringSubstr(Symbol(), 3, 3);
+        string result = "";
+        bool CheckLineTime = false;
+        int OrderTotalOfUsdBar = 0;
+        for (int t = 0; t < CountArray; t++) {
+            if (array[t] == "") continue;
+            if (StringFind(array[t], "ï»¿") >= 0)
+                array[t] = StringSubstr(array[t], 3, 10000);
+            string time[];
+            int OrderTotalOfEachBar = 0;
+            StringSplit(array[t], StringGetCharacter(",", 0), time);
+            //printf( time[1]);
+            double OpenPrice = iOpen(NULL, 0, iBarShift(NULL, 0, StringToTime(time[0])));
+            double ClosePrice = iClose(NULL, 0, iBarShift(NULL, 0, StringToTime(time[0])));
+            double HighestPrice = iHigh(NULL, 0, iBarShift(NULL, 0, StringToTime(time[0])));
+            double LowestPrice = iLow(NULL, 0, iBarShift(NULL, 0, StringToTime(time[0])));
+            double different = NormalizeDouble(MathAbs((ClosePrice - OpenPrice) / (HighestPrice - LowestPrice)), 2);
+            //MessageBoxTest("time");
+            //printf( time[0]);
+            //if( time[0]!="2020.08.17")
+            ///continue;
+            // printf(array[t]);
+            // printf(different);
+            if (time[1] == "0" && different >= 0.75 && OpenPrice < ClosePrice)
+                DrawVerticalLine(time[0] + "_Buy ", iBarShift(NULL, 0, StrToTime(time[0])), clrBlue, true, NULL);
+            if (time[1] == "1" && different >= 0.75 && OpenPrice > ClosePrice)
+                DrawVerticalLine(time[0] + "_Sell ", iBarShift(NULL, 0, StrToTime(time[0])), clrRed, NULL, true);
+            //printf(array[t]);
+            if (different >= 0.75 && time[0] == LineTime)
+                result = array[t];
+            if (array[t] != "" && different >= 0.75) {
+                string NewMinMax[];
+                StringSplit(array[t], StringGetCharacter("|", 0), NewMinMax);
+                string FinalMinMax = "";
+                //printf(NewMinMax[ArraySize(NewMinMax)-1]);
+                if (CheckWriteNewFile) {
+                    //printf(CheckWriteNewFile);
+                    WriteNewFile(Symbol() + "MixMax.csv", time[0] + "," + NewMinMax[ArraySize(NewMinMax) - 1]);
+                }
+            }
+        }
+        if (result != "")
+            if (StringFind(result, ObjectDescription("usd"), 0) < 0) {
+                printf("result " + result);
+                string MinMax[];
+                StringSplit(result, StringGetCharacter("|", 0), MinMax);
+                result = StringSubstr(result, 0, 60);
+                ObjectSetText("usd", MinMax[ArraySize(MinMax) - 1]);
+            }
+        FileClose(FileHandle);
+    }
+    //--- check for errors   
+    else printf(" failed to open %s, Error code = %d", GetLastError());
+    CheckWriteNewFile = false;
+    //ExpertRemove();
+    return 0;
+}
+void Backtest(int MA, int HS, int C) {
+    //printf("Bactest");
+    int CountToTalOrder = 0, LimitOrderForEachSymBol = 0, CheckOrderForEachSymBol_HS = 0, CheckOrderForEachSymBol_MA = 0, CheckOrderForEachSymBol_C = 0;
+    int OrderBuy = 0, OrderSell = 0;
+    datetime today = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+    for (int a = 0; a < OrdersTotal(); a++) {
+        if (OrderSelect(a, SELECT_BY_POS, MODE_TRADES)) {
+            //TotalLot += OrderLots() 
+            string array[];
+            StringSplit(OrderComment(), StringGetCharacter(",", 0), array);
+            CountToTalOrder++;
+            if (OrderSymbol() == symbol) {
+                LimitOrderForEachSymBol++;
+                if (LimitOrderForEachSymBol >= 1 && StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)) == today) {
+                    if (OrderMagicNumber() == 0 && StringFind(OrderComment(), "MA" + MA) >= 0)
+                        CheckOrderForEachSymBol_MA = 1;
+                    if (OrderMagicNumber() == 1 && StringFind(OrderComment(), "HS" + HS) >= 0)
+                        CheckOrderForEachSymBol_HS = 1;
+                    if (OrderMagicNumber() == 2 && StringFind(OrderComment(), "C" + C) >= 0)
+                        CheckOrderForEachSymBol_C = 1;
+                }
+                if (OrderMagicNumber() == 1) // 1 c?p ch? vào 1 l?nh
+                {
+                    if (OrderType() == OP_BUY) {
+                        //if ( OrderProfit()<0 && NormalizeDouble( (TimeCurrent()-OrderOpenTime())/86400,0)>20 )
+                        //int OrderCloseBuy = OrderClose(OrderTicket(), OrderLots(), Bid, 30 * pip, White);
+                        //if (OpenPriceHenikenBar0 > ClosePriceHenikenBar0 && OrderOpenTime() < iTime(NULL, 0, 1)){}
+                    }
+                    if (OrderType() == OP_SELL) {
+                        //if (OpenPriceHenikenBar0 < ClosePriceHenikenBar0 && OrderOpenTime() < iTime(NULL, 0, 1)){}
+                        //if (OrderProfit()<0 && NormalizeDouble( (TimeCurrent()-OrderOpenTime())/86400,0)>20 )
+                        //  int OrderCloseSell = OrderClose(OrderTicket(), OrderLots(), Ask, 30 * pip, White);
+                    }
+                }
+            }
+        }
+    }
+    int GetFirst15Orders = 0;
+    for (int b = OrdersHistoryTotal() - 1; b >= 0; b--) { ////
+        GetFirst15Orders++;
+        if (GetFirst15Orders > 15)
+            break;
+        if (OrderSelect(b, SELECT_BY_POS, MODE_HISTORY)) {
+            if ((string) OrderSymbol() == symbol && today == StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE))) // 1 c?p ch? vào 1 l?nh
+            {
+                if (OrderMagicNumber() == 0 && StringFind(OrderComment(), "MA" + MA) >= 0)
+                    CheckOrderForEachSymBol_MA = 1;
+                if (OrderMagicNumber() == 1 && StringFind(OrderComment(), "HS" + HS) >= 0)
+                    CheckOrderForEachSymBol_HS = 1;
+                if (OrderMagicNumber() == 2 && StringFind(OrderComment(), "C" + C) >= 0)
+                    CheckOrderForEachSymBol_C = 1;
+            }
+        }
+    }
+    ////////////////////////////////////////////////////////////////////////////////////////////////
+    //if ( (Risk >= 50 && CountToTalOrder >= 1)) //CheckOrderForEachSymBol 
+    //   
+    lot = 0.01;
+    double MA1 = NormalizeDouble(iMA(NULL, 0, 1, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA2 = NormalizeDouble(iMA(NULL, 0, 2, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA3 = NormalizeDouble(iMA(NULL, 0, 3, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA5 = NormalizeDouble(iMA(NULL, 0, 5, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA8 = NormalizeDouble(iMA(NULL, 0, 8, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA13 = NormalizeDouble(iMA(NULL, 0, 13, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA21 = NormalizeDouble(iMA(NULL, 0, 21, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double OpenPrice = iOpen(NULL, 0, 1);
+    double ClosePrice = iClose(NULL, 0, 1);
+    double HighestPrice = iHigh(NULL, 0, 1);
+    double LowestPrice = iLow(NULL, 0, 1);
+    double different = NormalizeDouble(MathAbs((ClosePrice - OpenPrice) / (HighestPrice - LowestPrice)), 2);
+    double SL_TP = 1;
+    double BodyHeniken0 = NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)), Digits);
+    double BodyHeniken1 = NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 1) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 1)), Digits);
+    double BodyHeniken2 = NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 2) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 2)), Digits);
+    if (CheckOrderForEachSymBol_MA == 0) {
+        double StopLossMA;
+        double TakeProfitMA;
+        string CommentMA;
+        if (iLow(NULL, 0, 1) < NormalizeDouble(iMA(NULL, 0, MA, 0, MODE_EMA, PRICE_CLOSE, 1), Digits) && NormalizeDouble(iMA(NULL, 0, MA, 0, MODE_EMA, PRICE_CLOSE, 1), Digits) < iHigh(NULL, 0, 1) && BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 > MA3 && MA3 > MA5 && MA5 > MA8 && MA8 > MA13 && MA13 > MA21 && different >= 0.75 && OpenPrice < ClosePrice) {
+            StopLossMA = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, 5, 0));
+            TakeProfitMA = NormalizeDouble(Ask + (Ask - StopLossMA) * SL_TP, Digits);
+            CommentMA = "MA" + MA;
+            OrderBuy = OrderSend(NULL, 0, 0.01, Ask, 3, StopLossMA, TakeProfitMA, CommentMA, 0, NULL);
+            printf("OrderBuyMA " + MA);
+        }
+        if (iLow(NULL, 0, 1) < NormalizeDouble(iMA(NULL, 0, MA, 0, MODE_EMA, PRICE_CLOSE, 1), Digits) && NormalizeDouble(iMA(NULL, 0, MA, 0, MODE_EMA, PRICE_CLOSE, 1), Digits) < iHigh(NULL, 0, 1) && BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 < MA3 && MA3 < MA5 && MA5 < MA8 && MA8 < MA13 && MA13 < MA21 && different >= 0.75 && OpenPrice > ClosePrice) {
+            //MessageBoxTest("1");
+            StopLossMA = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 5, 0));
+            TakeProfitMA = NormalizeDouble(Bid - (StopLossMA - Bid) * SL_TP, Digits);
+            CommentMA = "MA" + MA;
+            OrderSell = OrderSend(NULL, 1, 0.01, Bid, 3, StopLossMA, TakeProfitMA, CommentMA, 0, NULL);
+            printf("OrderSellMA " + MA);
+        }
+    }
+    if (CheckOrderForEachSymBol_HS == 0) {
+        string CommentHS;
+        double StopLossHS, TakeProfitHS;
+        double ClosePriceHenikenBar2HS = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, HS, 2, 1, 3, 2), Digits);
+        double OpenPriceHenikenBar2HS = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, HS, 2, 1, 2, 2), Digits);
+        double ClosePriceHenikenBar1HS = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, HS, 2, 1, 3, 1), Digits);
+        double OpenPriceHenikenBar1HS = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, HS, 2, 1, 2, 1), Digits);
+        if (OpenPriceHenikenBar2HS > ClosePriceHenikenBar2HS && OpenPriceHenikenBar1HS < ClosePriceHenikenBar1HS && BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 > MA3 && MA3 > MA5 && MA5 > MA8 && MA8 > MA13 && MA13 > MA21 && different >= 0.75 && OpenPrice < ClosePrice) {
+            StopLossHS = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, HS, 1));
+            TakeProfitHS = NormalizeDouble(Ask + (Ask - StopLossHS) * SL_TP, Digits);
+            CommentHS = "HS" + HS;
+            OrderBuy = OrderSend(NULL, 0, lot, Ask, 3, StopLossHS, TakeProfitHS, CommentHS, 1, NULL);
+            printf("OrderBuyHS " + HS);
+        }
+        if (OpenPriceHenikenBar2HS < ClosePriceHenikenBar2HS && OpenPriceHenikenBar1HS > ClosePriceHenikenBar1HS && BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 < MA3 && MA3 < MA5 && MA5 < MA8 && MA8 < MA13 && MA13 < MA21 && different >= 0.75 && OpenPrice > ClosePrice) {
+            StopLossHS = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, HS, 1));
+            TakeProfitHS = NormalizeDouble(Bid - (StopLossHS - Bid) * SL_TP, Digits);
+            CommentHS = "HS" + HS;
+            OrderSell = OrderSend(NULL, 1, lot, Bid, 3, StopLossHS, TakeProfitHS, CommentHS, 1, NULL);
+            printf("OrderSellHS " + HS);
+        }
+    }
+    if (CheckOrderForEachSymBol_C == 0) {
+        double StopLossC;
+        double TakeProfitC;
+        string CommentC;
+        double HighC = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, C, 2));
+        double OpenHighC = iOpen(NULL, 0, iHighest(NULL, 0, MODE_HIGH, C, 2));
+        double LowC = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, C, 2));
+        double OpenLowC = iOpen(NULL, 0, iLowest(NULL, 0, MODE_HIGH, C, 2));
+        double CloseBar2 = iClose(NULL, 0, 2);
+        if (Bid > HighC && CloseBar2 < OpenHighC && BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 > MA3 && MA3 > MA5 && MA5 > MA8 && MA8 > MA13 && MA13 > MA21 && different >= 0.75 && OpenPrice < ClosePrice) {
+            StopLossC = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, C, 1));
+            TakeProfitC = NormalizeDouble(Ask + (Ask - StopLossC) * SL_TP, Digits);
+            CommentC = "C" + C;
+            OrderBuy = OrderSend(NULL, 0, lot, Ask, 3, StopLossC, TakeProfitC, CommentC, 2, NULL);
+            printf("OrderBuyC " + C);
+        }
+        if (Ask < LowC && CloseBar2 > OpenLowC && BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 > MA3 && MA3 > MA5 && MA5 > MA8 && MA8 > MA13 && MA13 > MA21 && different >= 0.75 && OpenPrice < ClosePrice) {
+            StopLossC = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, C, 1));
+            TakeProfitC = NormalizeDouble(Bid - (StopLossC - Bid) * SL_TP, Digits);
+            CommentC = "C" + C;
+            OrderSell = OrderSend(NULL, 1, lot, Bid, 3, StopLossC, TakeProfitC, CommentC, 2, NULL);
+            printf("OrderSellC " + C);
+        }
+    }
+}
+void usd() {
+    int CountToTalOrder = 0, LimitOrderForEachSymBol = 0, CheckOrderForEachSymBol = 0;
+    datetime today = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+    for (int a = 0; a < OrdersTotal(); a++) {
+        if (OrderSelect(a, SELECT_BY_POS, MODE_TRADES)) {
+            //TotalLot += OrderLots() 
+            string array[];
+            StringSplit(OrderComment(), StringGetCharacter(",", 0), array);
+            CountToTalOrder++;
+            if (OrderSymbol() == symbol) {
+                LimitOrderForEachSymBol++;
+                if (OrderMagicNumber() == 1 && LimitOrderForEachSymBol >= 1 && StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)) == today) {
+                    CheckOrderForEachSymBol = 1;
+                }
+                if (OrderMagicNumber() == 1) // 1 c?p ch? vào 1 l?nh
+                {
+                    if (OrderType() == OP_BUY) {
+                        //if ( OrderProfit()<0 && NormalizeDouble( (TimeCurrent()-OrderOpenTime())/86400,0)>20 )
+                        //int OrderCloseBuy = OrderClose(OrderTicket(), OrderLots(), Bid, 30 * pip, White);
+                        //if (OpenPriceHenikenBar0 > ClosePriceHenikenBar0 && OrderOpenTime() < iTime(NULL, 0, 1)){}
+                    }
+                    if (OrderType() == OP_SELL) {
+                        //if (OpenPriceHenikenBar0 < ClosePriceHenikenBar0 && OrderOpenTime() < iTime(NULL, 0, 1)){}
+                        //if (OrderProfit()<0 && NormalizeDouble( (TimeCurrent()-OrderOpenTime())/86400,0)>20 )
+                        //  int OrderCloseSell = OrderClose(OrderTicket(), OrderLots(), Ask, 30 * pip, White);
+                    }
+                }
+            }
+        }
+    }
+    int GetFirst15Orders = 0;
+    for (int b = OrdersHistoryTotal() - 1; b >= 0; b--) { ////
+        GetFirst15Orders++;
+        if (GetFirst15Orders > 15)
+            break;
+        if (OrderSelect(b, SELECT_BY_POS, MODE_HISTORY)) {
+            if ((string) OrderSymbol() == symbol && today == StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE))) // 1 c?p ch? vào 1 l?nh
+            {
+                if (OrderMagicNumber() == 1)
+                    CheckOrderForEachSymBol = 1;
+            }
+        }
+    }
+    if (CheckOrderForEachSymBol == 1)
+        return;
+    double MA1 = NormalizeDouble(iMA(NULL, 0, 1, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA2 = NormalizeDouble(iMA(NULL, 0, 2, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA3 = NormalizeDouble(iMA(NULL, 0, 3, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA5 = NormalizeDouble(iMA(NULL, 0, 5, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA8 = NormalizeDouble(iMA(NULL, 0, 8, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA13 = NormalizeDouble(iMA(NULL, 0, 13, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double MA21 = NormalizeDouble(iMA(NULL, 0, 21, 0, MODE_EMA, PRICE_CLOSE, 1), Digits);
+    double ClosePriceHenikenBar2HS2 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 2, 2, 1, 3, 2), Digits);
+    double OpenPriceHenikenBar2HS2 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 2, 2, 1, 2, 2), Digits);
+    double ClosePriceHenikenBar1HS2 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 2, 2, 1, 3, 1), Digits);
+    double OpenPriceHenikenBar1HS2 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 2, 2, 1, 2, 1), Digits);
+    double ClosePriceHenikenBar2HS3 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 3, 2, 1, 3, 2), Digits);
+    double OpenPriceHenikenBar2HS3 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 3, 2, 1, 2, 2), Digits);
+    double ClosePriceHenikenBar1HS3 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 3, 2, 1, 3, 1), Digits);
+    double OpenPriceHenikenBar1HS3 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 3, 2, 1, 2, 1), Digits);
+    double ClosePriceHenikenBar2HS4 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 4, 2, 1, 3, 2), Digits);
+    double OpenPriceHenikenBar2HS4 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 4, 2, 1, 2, 2), Digits);
+    double ClosePriceHenikenBar1HS4 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 4, 2, 1, 3, 1), Digits);
+    double OpenPriceHenikenBar1HS4 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, 4, 2, 1, 2, 1), Digits);
+    double CloseBar2 = iClose(NULL, 0, 2);
+    double HighC3 = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 3, 2));
+    double HighC4 = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 4, 2));
+    double HighC5 = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 5, 2));
+    double OpenHighC3 = iOpen(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 3, 2));
+    double OpenHighC4 = iOpen(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 4, 2));
+    double OpenHighC5 = iOpen(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 5, 2));
+    double LowC3 = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, 3, 2));
+    double LowC4 = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, 4, 2));
+    double LowC5 = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, 5, 2));
+    double OpenLowC3 = iOpen(NULL, 0, iLowest(NULL, 0, MODE_HIGH, 3, 2));
+    double OpenLowC4 = iOpen(NULL, 0, iLowest(NULL, 0, MODE_HIGH, 4, 2));
+    double OpenLowC5 = iOpen(NULL, 0, iLowest(NULL, 0, MODE_HIGH, 5, 2));
+    conditionBuy[0] = iLow(NULL, 0, 1) < MA2 && MA2 < iHigh(NULL, 0, 1); // Cut MA2
+    conditionBuy[1] = iLow(NULL, 0, 1) < MA3 && MA3 < iHigh(NULL, 0, 1); // Cut MA3
+    conditionBuy[2] = iLow(NULL, 0, 1) < MA5 && MA5 < iHigh(NULL, 0, 1); // Cut MA5
+    conditionBuy[3] = OpenPriceHenikenBar2HS2 > ClosePriceHenikenBar2HS2 && OpenPriceHenikenBar1HS2 < ClosePriceHenikenBar1HS2; //  HS2
+    conditionBuy[4] = OpenPriceHenikenBar2HS3 > ClosePriceHenikenBar2HS3 && OpenPriceHenikenBar1HS3 < ClosePriceHenikenBar1HS3; //  HS3
+    conditionBuy[5] = OpenPriceHenikenBar2HS4 > ClosePriceHenikenBar2HS4 && OpenPriceHenikenBar1HS4 < ClosePriceHenikenBar1HS4; // HS4
+    conditionBuy[6] = Bid > HighC3 && CloseBar2 < OpenHighC3; //  C3
+    conditionBuy[7] = Bid > HighC4 && CloseBar2 < OpenHighC4; //C4
+    conditionBuy[8] = Bid > HighC5 && CloseBar2 < OpenHighC5; //C5
+    int checkconditionBuy = 0;
+    string CommentBuy = "";
+    for (int j = 0; j < ArraySize(conditionBuy); j++) {
+        if (conditionBuy[j]) {
+            // if (checkconditionBuy >= 3)
+            //  break;
+            checkconditionBuy++;
+            CommentBuy += j + ",";
+            //printf("conditionBuy " + j);
+        }
+    }
+    conditionSell[0] = iLow(NULL, 0, 1) < MA2 && MA2 < iHigh(NULL, 0, 1);
+    conditionSell[1] = iLow(NULL, 0, 1) < MA3 && MA3 < iHigh(NULL, 0, 1);
+    conditionSell[2] = iLow(NULL, 0, 1) < MA5 && MA5 < iHigh(NULL, 0, 1);
+    conditionSell[3] = OpenPriceHenikenBar2HS2 < ClosePriceHenikenBar2HS2 && OpenPriceHenikenBar1HS2 > ClosePriceHenikenBar1HS2;
+    conditionSell[4] = OpenPriceHenikenBar2HS3 < ClosePriceHenikenBar2HS3 && OpenPriceHenikenBar1HS3 > ClosePriceHenikenBar1HS3;
+    conditionSell[5] = OpenPriceHenikenBar2HS4 < ClosePriceHenikenBar2HS4 && OpenPriceHenikenBar1HS4 > ClosePriceHenikenBar1HS4;
+    conditionSell[6] = Ask < HighC3 && CloseBar2 > OpenLowC3;
+    conditionSell[7] = Ask < HighC4 && CloseBar2 > OpenLowC4;
+    conditionSell[8] = Ask < HighC5 && CloseBar2 > OpenLowC5;
+    int checkconditionSell = 0;
+    string CommentSell = "";
+    for (int k = 0; k < ArraySize(conditionSell); k++) {
+        if (conditionSell[k]) {
+            //if (checkconditionSell >= 3)
+            // break;
+            checkconditionSell++;
+            CommentSell += k + ",";
+            //printf("conditionSell " + k);
+        }
+    }
+    double OpenPrice = iOpen(NULL, 0, 1);
+    double ClosePrice = iClose(NULL, 0, 1);
+    double HighestPrice = iHigh(NULL, 0, 1);
+    double LowestPrice = iLow(NULL, 0, 1);
+    double different = NormalizeDouble(MathAbs((ClosePrice - OpenPrice) / (HighestPrice - LowestPrice)), 2);
+    double StopLoss; //= iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 5, 0));
+    double TakeProfit; // = NormalizeDouble(Bid - (StopLoss - Bid) * SL_TP, Digits);
+    double SL_TP = 1;
+    double BodyHeniken0 = NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)), Digits);
+    double BodyHeniken1 = NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 1) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 1)), Digits);
+    double BodyHeniken2 = NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 2) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 2)), Digits);
+    if (BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 > MA3 && MA3 > MA5 && MA5 > MA8 && MA8 > MA13 && MA13 > MA21 && checkconditionBuy >= 3 && different >= 0.75 && OpenPrice < ClosePrice) {
+        StopLoss = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, 5, 0));
+        TakeProfit = NormalizeDouble(Ask + (Ask - StopLoss) * SL_TP, Digits);
+        int OrderBuy = OrderSend(NULL, 0, 0.01, Ask, 3, StopLoss, TakeProfit, CommentBuy, 1, NULL);
+        //DrawVerticalLine(iTime(NULL, 0, 1) + "_Buy ", 1, clrBlue, true, NULL);
+        printf(CommentBuy);
+    }
+    if (BodyHeniken0 > BodyHeniken1 && BodyHeniken1 > BodyHeniken2 && MA2 < MA3 && MA3 < MA5 && MA5 < MA8 && MA8 < MA13 && MA13 < MA21 && checkconditionSell >= 3 && different >= 0.75 && OpenPrice > ClosePrice) {
+        //MessageBoxTest("1");
+        StopLoss = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 5, 0));
+        TakeProfit = NormalizeDouble(Bid - (StopLoss - Bid) * SL_TP, Digits);
+        int OrderSell = OrderSend(NULL, 1, 0.01, Bid, 3, StopLoss, TakeProfit, CommentSell, 1, NULL);
+        //DrawVerticalLine(iTime(NULL, 0, 1) + "_Sell ", 1, clrRed, NULL, true);
+        // MessageBoxTest("2");
+        printf(CommentSell);
+    }
+}
+// void FindCondition(int MA, int HS, int C) {
+// //if (Hour() == 20 && Minute() == 0)
+// //  DeleteAllObjects();
+// //printf("MA "+MA+" HS "+HS+" C "+C);
+// //printf(MA);
+// //printf("ASk "+Ask);
+// int CountToTalOrder = 0, LimitOrderForEachSymBol = 0, CheckOrderForEachSymBol_HS = 0, CheckOrderForEachSymBol_MA = 0, CheckOrderForEachSymBol_C = 0;
+// int OrderBuy = 0, OrderSell = 0;
+// datetime today = StrToTime(TimeToStr(TimeCurrent(), TIME_DATE));
+// double ClosePriceHenikenBar1 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, MA, 2, 1, 3, 1), Digits);
+// double OpenPriceHenikenBar1 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, MA, 2, 1, 2, 1), Digits);
+// double ClosePriceHenikenBar0 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, MA, 2, 1, 3, 0), Digits);
+// double OpenPriceHenikenBar0 = NormalizeDouble(iCustom(NULL, 0, "Heiken_Ashi_Smoothed", 1, MA, 2, 1, 2, 0), Digits);
+// for (int a = 0; a < OrdersTotal(); a++) {
+// if (OrderSelect(a, SELECT_BY_POS, MODE_TRADES)) {
+// //TotalLot += OrderLots() 
+// string array[];
+// StringSplit(OrderComment(), StringGetCharacter(",", 0), array);
+// CountToTalOrder++;
+// if (OrderSymbol() == symbol) {
+// LimitOrderForEachSymBol++;
+// if (LimitOrderForEachSymBol >= 1 && StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE)) == today) {
+// if (OrderMagicNumber() == 0 && StringFind(OrderComment(), "MA" + MA) >= 0)
+// CheckOrderForEachSymBol_MA = 1;
+// if (OrderMagicNumber() == 1 && StringFind(OrderComment(), "HS" + HS) >= 0)
+// CheckOrderForEachSymBol_HS = 1;
+// if (OrderMagicNumber() == 2 && StringFind(OrderComment(), "C" + C) >= 0)
+// CheckOrderForEachSymBol_C = 1;
+// }
+// if (OrderMagicNumber() == 1) // 1 c?p ch? vào 1 l?nh
+// {
+// if (OrderType() == OP_BUY) {
+// //if ( OrderProfit()<0 && NormalizeDouble( (TimeCurrent()-OrderOpenTime())/86400,0)>20 )
+// //int OrderCloseBuy = OrderClose(OrderTicket(), OrderLots(), Bid, 30 * pip, White);
+// //if (OpenPriceHenikenBar0 > ClosePriceHenikenBar0 && OrderOpenTime() < iTime(NULL, 0, 1)){}
+// }
+// if (OrderType() == OP_SELL) {
+// //if (OpenPriceHenikenBar0 < ClosePriceHenikenBar0 && OrderOpenTime() < iTime(NULL, 0, 1)){}
+// //if (OrderProfit()<0 && NormalizeDouble( (TimeCurrent()-OrderOpenTime())/86400,0)>20 )
+// //  int OrderCloseSell = OrderClose(OrderTicket(), OrderLots(), Ask, 30 * pip, White);
+// }
+// }
+// }
+// }
+// }
+// int GetFirst15Orders = 0;
+// for (int b = OrdersHistoryTotal() - 1; b >= 0; b--) { ////
+// GetFirst15Orders++;
+// if (GetFirst15Orders > 15)
+// break;
+// if (OrderSelect(b, SELECT_BY_POS, MODE_HISTORY)) {
+// if ((string) OrderSymbol() == symbol && today == StrToTime(TimeToStr(OrderOpenTime(), TIME_DATE))) // 1 c?p ch? vào 1 l?nh
+// {
+// if (OrderMagicNumber() == 0 && StringFind(OrderComment(), "MA" + MA) >= 0)
+// CheckOrderForEachSymBol_MA = 1;
+// if (OrderMagicNumber() == 1 && StringFind(OrderComment(), "HS" + HS) >= 0)
+// CheckOrderForEachSymBol_HS = 1;
+// if (OrderMagicNumber() == 2 && StringFind(OrderComment(), "C" + C) >= 0)
+// CheckOrderForEachSymBol_C = 1;
+// }
+// }
+// }
+// ////////////////////////////////////////////////////////////////////////////////////////////////
+// //if ( (Risk >= 50 && CountToTalOrder >= 1)) //CheckOrderForEachSymBol 
+// //   
+// lot = 0.01;
+// int SL_TP = 1;
+// double MA1 = NormalizeDouble(iMA(NULL, 0, 1, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double MA2 = NormalizeDouble(iMA(NULL, 0, 2, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double MA3 = NormalizeDouble(iMA(NULL, 0, 3, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double MA5 = NormalizeDouble(iMA(NULL, 0, 5, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double MA8 = NormalizeDouble(iMA(NULL, 0, 8, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double MA13 = NormalizeDouble(iMA(NULL, 0, 13, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double MA21 = NormalizeDouble(iMA(NULL, 0, 21, 0, MODE_EMA, PRICE_CLOSE, 0), Digits);
+// double OpenPrice = iOpen(NULL, 0, 0);
+// double ClosePrice = iClose(NULL, 0, 0);
+// double HighestPrice = iHigh(NULL, 0, 0);
+// double LowestPrice = iLow(NULL, 0, 0);
+// //      double different=  NormalizeDouble(MathAbs((ClosePrice-OpenPrice)/(HighestPrice- LowestPrice)),Digits);
+// if (CheckOrderForEachSymBol_MA == 0) {
+// OrderBuy = -1;
+// OrderSell = -1;
+// string CommentMA;
+// double StopLossMa, TakeProfitMa;
+// if (Cross(0, Close[0] > iMA(NULL, PERIOD_CURRENT, MA, 0, MODE_EMA, PRICE_CLOSE, 0))) {
+// StopLossMa = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, 4, 0));
+// TakeProfitMa = NormalizeDouble(Ask + (Ask - StopLossMa) * SL_TP, Digits);
+// CommentMA = "MA" + MA + "," + NormalizeDouble((Ask - StopLossMa) / pip, Digits) + "," + NormalizeDouble(SL_TP * (Ask - StopLossMa) / pip, Digits) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0);
+// if (MA8 > MA21 && ClosePrice > OpenPrice)
+// OrderBuy = OrderSend(NULL, 0, lot, Ask, 3, StopLossMa, TakeProfitMa, CommentMA, 0, NULL);
+// }
+// if (Cross(1, Close[0] < iMA(NULL, PERIOD_CURRENT, MA, 0, MODE_EMA, PRICE_CLOSE, 0))) {
+// StopLossMa = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, 4, 0));
+// TakeProfitMa = NormalizeDouble(Bid - (StopLossMa - Bid) * SL_TP, Digits);
+// CommentMA = "MA" + MA + "," + NormalizeDouble((StopLossMa - Bid) / pip, Digits) + "," + NormalizeDouble(SL_TP * (StopLossMa - Bid) / pip, Digits) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0);
+// if (MA8 < MA21 && ClosePrice < OpenPrice)
+// OrderSell = OrderSend(NULL, 1, lot, Bid, 3, StopLossMa, TakeProfitMa, CommentMA, 0, NULL);
+// //printf(CommentMA + " StopLossMa  " + StopLossMa + " TakeProfitMa " + TakeProfitMa + " ASK " + Ask);
+// }
+// if (OrderBuy >= 0 || OrderSell >= 0)
+// printf("MA" + MA);
+// }
+// if (CheckOrderForEachSymBol_HS == 0) {
+// OrderBuy = -1;
+// OrderSell = -1;
+// string CommentHS;
+// double StopLossHS, TakeProfitHS;
+// if (OpenPriceHenikenBar1 > ClosePriceHenikenBar1 && OpenPriceHenikenBar0 < ClosePriceHenikenBar0) {
+// StopLossHS = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, HS, 0));
+// TakeProfitHS = NormalizeDouble(Ask + (Ask - StopLossHS) * SL_TP, Digits);
+// CommentHS = "HS" + HS + "," + NormalizeDouble((Ask - StopLossHS) / pip, Digits) + "," + NormalizeDouble(SL_TP * (Ask - StopLossHS) / pip, Digits) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0);
+// if (MA8 > MA21 && ClosePrice > OpenPrice)
+// OrderBuy = OrderSend(NULL, 0, lot, Ask, 3, StopLossHS, TakeProfitHS, CommentHS, 1, NULL);
+// }
+// if (OpenPriceHenikenBar1 < ClosePriceHenikenBar1 && OpenPriceHenikenBar0 > ClosePriceHenikenBar0) {
+// StopLossHS = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, HS, 0));
+// TakeProfitHS = NormalizeDouble(Bid - (StopLossHS - Bid) * SL_TP, Digits);
+// CommentHS = "HS" + HS + "," + NormalizeDouble((StopLossHS - Bid) / pip, Digits) + "," + NormalizeDouble(SL_TP * (StopLossHS - Bid) / pip, Digits) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0);
+// if (MA8 < MA21 && ClosePrice < OpenPrice)
+// OrderSell = OrderSend(NULL, 1, lot, Bid, 3, StopLossHS, TakeProfitHS, CommentHS, 1, NULL);
+// }
+// if (OrderBuy >= 0 || OrderSell >= 0) {
+// printf("HS" + HS);
+// // MessageBoxTest(HS);
+// }
+// }
+// if (CheckOrderForEachSymBol_C == 0) {
+// OrderBuy = -1;
+// OrderSell = -1;
+// double StopLossC;
+// double TakeProfitC;
+// string CommentC;
+// double CloseBar1 = iClose(NULL, 0, 1);
+// double OpenHighBar = iOpen(NULL, 0, iHighest(NULL, 0, MODE_HIGH, C, 1));
+// double OpenLowBar = iOpen(NULL, 0, iLowest(NULL, 0, MODE_LOW, C, 1));
+// if (Bid > iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, C, 1))) {
+// StopLossC = iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, C, 0));
+// TakeProfitC = NormalizeDouble(Ask + (Ask - StopLossC) * SL_TP, Digits);
+// CommentC = "C" + C + "," + NormalizeDouble((Ask - StopLossC) / pip, Digits) + "," + NormalizeDouble(SL_TP * (Ask - StopLossC) / pip, Digits) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0);
+// if (MA8 > MA21 && ClosePrice > OpenPrice && CloseBar1 < OpenHighBar)
+// OrderBuy = OrderSend(NULL, 0, lot, Ask, 3, StopLossC, TakeProfitC, CommentC, 2, NULL);
+// }
+// if (Ask < iLow(NULL, 0, iLowest(NULL, 0, MODE_LOW, C, 1))) {
+// StopLossC = iHigh(NULL, 0, iHighest(NULL, 0, MODE_HIGH, C, 0));
+// TakeProfitC = NormalizeDouble(Bid - (StopLossC - Bid) * SL_TP, Digits);
+// CommentC = "C" + C + "," + NormalizeDouble((StopLossC - Bid) / pip, Digits) + "," + NormalizeDouble(SL_TP * (StopLossC - Bid) / pip, Digits) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 0, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 10080, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0) + "," + NormalizeDouble(MathAbs(iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 3, 0) - iCustom(NULL, 43200, "Heiken Ashi", Red, White, Red, White, 2, 0)) / (10 * Point), 0);
+// if (MA8 < MA21 && ClosePrice < OpenPrice && CloseBar1 > OpenLowBar)
+// OrderSell = OrderSend(NULL, 1, lot, Bid, 3, StopLossC, TakeProfitC, CommentC, 2, NULL);
+// }
+// if (OrderBuy >= 0 || OrderSell >= 0) {
+// printf("C" + C);
+// // MessageBoxTest(C);
+// }
+// }
+// }
+bool crossed[2];
+bool Cross(int i, bool condition) //returns true if "condition" is true and was false in the previous call
+{
+    bool ret = condition && !crossed[i];
+    crossed[i] = condition;
+    //printf("condition "+condition);
+    //printf("crossed[i] "+crossed[i]);
+    //printf("ret "+ret);
+    return (ret);
+}
+void MessageBoxTest(string title) {
+    MessageBoxA(0, title, "", 0);
+}
+//+-----
+datetime FindTimeTopBottom(int period = NULL, int TopBottomOrder = NULL) {
+    datetime mytime = iCustom(NULL, period, "MyZigZag", 12, 5, 3, 5, TopBottomOrder);
+    return mytime;
+}
+datetime OldFindTimeTopBottom(int MyOrderType, double topbottom0, double topbottom1, double topbottom2, double topbottom3, double topbottom4 = 0, int period = NULL, int TopBottomOrder = NULL) {
+    int CheckCurrentBarToHighLowBuy, CheckCurrentBarToHighLowSell, FindTopBottom0, FindTopBottom1, FindTopBottom2, FindTopBottom3, FindTopBottom4;
+    if (period == NULL) period = 0;
+    int Bar = Bars;
+    if (MyOrderType) {
+        for (int t = 0; t < Bar; t++) { // c?n th?n khi cotinue các giá tr? tìm dc  là 0, ph?i có thêm 1 bi?n ?? xét ?? dù giá tr? nó tìm dc là 0(khác v?i 0 ban ??u ch?a tìm)  nó c?ng ko l?p l?i n?a;
+            if (CheckCurrentBarToHighLowSell == 0 && FindTopBottom0 == 0 && (iHigh(NULL, period, t) == topbottom0 || iLow(NULL, period, t) == topbottom0)) {
+                CheckCurrentBarToHighLowSell = 1;
+                FindTopBottom0 = t;
+                if (TopBottomOrder == 0)
+                    return iTime(NULL, period, t);
+            }
+            if (CheckCurrentBarToHighLowSell == 0) continue;
+            if (t <= FindTopBottom0) continue;
+            if (FindTopBottom1 == 0 && (iHigh(NULL, period, t) == topbottom1)) {
+                FindTopBottom1 = t;
+                if (TopBottomOrder == 1)
+                    return iTime(NULL, period, t);
+            }
+            if (t <= FindTopBottom1) continue;
+            if (FindTopBottom1 != 0 && FindTopBottom2 == 0 && iLow(NULL, period, t) == topbottom2) {
+                FindTopBottom2 = t;
+                if (TopBottomOrder == 2)
+                    return iTime(NULL, period, t);
+            }
+            if (t <= FindTopBottom2) continue;
+            if (FindTopBottom2 != 0 && FindTopBottom3 == 0 && iHigh(NULL, period, t) == topbottom3) {
+                FindTopBottom3 = t;
+                if (TopBottomOrder == 3)
+                    return iTime(NULL, period, t);
+            }
+            if (t <= FindTopBottom3) continue;
+            if (FindTopBottom3 != 0 && FindTopBottom4 == 0 && iLow(NULL, period, t) == topbottom4) {
+                if (topbottom4 == 0) return 0;
+                FindTopBottom4 = t;
+                break;
+            }
+        }
+    } else {
+        for (int y = 0; y < Bar; y++) {
+            if (CheckCurrentBarToHighLowBuy == 0 && FindTopBottom0 == 0 && (iHigh(NULL, period, y) == topbottom0 || iLow(NULL, period, y) == topbottom0)) {
+                CheckCurrentBarToHighLowBuy = 1;
+                FindTopBottom0 = y;
+                if (TopBottomOrder == 0)
+                    return iTime(NULL, period, y);
+            }
+            if (CheckCurrentBarToHighLowBuy == 0) continue;
+            if (y <= FindTopBottom0) continue;
+            if (FindTopBottom1 == 0 && (iLow(NULL, period, y) == topbottom1)) {
+                FindTopBottom1 = y;
+                if (TopBottomOrder == 1) {
+                    return iTime(NULL, period, y);
+                }
+            }
+            if (y <= FindTopBottom1) continue;
+            if (FindTopBottom1 != 0 && FindTopBottom2 == 0 && iHigh(NULL, period, y) == topbottom2) {
+                FindTopBottom2 = y;
+                if (TopBottomOrder == 2)
+                    return iTime(NULL, period, y);
+            }
+            if (y <= FindTopBottom2) continue;
+            if (FindTopBottom2 != 0 && FindTopBottom3 == 0 && iLow(NULL, period, y) == topbottom3) {
+                FindTopBottom3 = y;
+                if (TopBottomOrder == 3)
+                    return iTime(NULL, period, y);
+            }
+            if (y <= FindTopBottom3) continue;
+            if (FindTopBottom3 != 0 && FindTopBottom4 == 0 && iHigh(NULL, period, y) == topbottom4) {
+                if (topbottom4 == 0) return 0;
+                FindTopBottom4 = y;
+                break;
+            }
+        }
+    }
+    return 0;
+}
+double FindHighestLowestValueToday(int Lowest = NULL) {
+    datetime today = StrToTime(TimeToStr(Time[0], TIME_DATE));
+    //double low,high;
+    for (int y = 0; y < 24; y++) {
+        //if(low==0) low =Low[y];
+        //if(high==0) high=High[y];
+        //if(low<Low[y]) low=Low[y];
+        //if(high>High[y]) high=High[y];
+        if (StrToTime(TimeToStr(iTime(NULL, 60, y), TIME_DATE)) != today) {
+            y--;
+            break;
+        }
+    }
+    if (Lowest == 0)
+        return iLow(NULL, 60, iLowest(NULL, 60, MODE_LOW, y, 0));
+    else
+        return iHigh(NULL, 60, iHighest(NULL, 60, MODE_HIGH, y, 0));
+}
+double FindIchiMoku(int border, int shift, int period = NULL) {
+    double ichimokuUp, ichimokuDown;
+    if (period == NULL) period = 0;
+    if (iIchimoku(NULL, period, 9, 26, 52, MODE_SENKOUSPANA, shift) > iIchimoku(NULL, period, 9, 26, 52, MODE_SENKOUSPANB, shift)) {
+        ichimokuUp = iIchimoku(NULL, period, 9, 26, 52, MODE_SENKOUSPANA, shift);
+        ichimokuDown = iIchimoku(NULL, period, 9, 26, 52, MODE_SENKOUSPANB, shift);
+    } else {
+        ichimokuUp = iIchimoku(NULL, period, 9, 26, 52, MODE_SENKOUSPANB, shift);
+        ichimokuDown = iIchimoku(NULL, period, 9, 26, 52, MODE_SENKOUSPANA, shift);
+    }
+    if (border) {
+        return ichimokuUp;
+    } else
+        return ichimokuDown;
+}
+double FindIchiMokuTenKanKiJun(int border, int shift, int period = NULL) {
+    double ichimokuUp, ichimokuDown;
+    if (period == NULL) period = 0;
+    if (iIchimoku(NULL, period, 9, 26, 52, MODE_TENKANSEN, shift) > iIchimoku(NULL, period, 9, 26, 52, MODE_KIJUNSEN, shift)) {
+        ichimokuUp = iIchimoku(NULL, period, 9, 26, 52, MODE_TENKANSEN, shift);
+        ichimokuDown = iIchimoku(NULL, period, 9, 26, 52, MODE_KIJUNSEN, shift);
+    } else {
+        ichimokuUp = iIchimoku(NULL, period, 9, 26, 52, MODE_KIJUNSEN, shift);
+        ichimokuDown = iIchimoku(NULL, period, 9, 26, 52, MODE_TENKANSEN, shift);
+    }
+    if (border) {
+        return ichimokuUp;
+    } else
+        return ichimokuDown;
+}
+double FindLot(double MySL, int MyOrderType) {
+    //MySL =MySL +MarketInfo(Symbol(), MODE_SPREAD)*pip+Commision;
+    double MyLot = 0;
+    double MaxLot = MarketInfo(Symbol(), MODE_MAXLOT);
+    double MinLot = MarketInfo(Symbol(), MODE_MINLOT);
+    double ticksize = MarketInfo(Symbol(), MODE_TICKSIZE);
+    double Lot_Step = MarketInfo(Symbol(), MODE_LOTSTEP);
+    double tickvalue = MarketInfo(Symbol(), MODE_TICKVALUE); // trong backtest lun là 1 nên sai
+    double mybalance = NormalizeDouble(Risk * AccountBalance() / 100, Digits) - 5;
+    if (ticksize == 0 || tickvalue == 0) MyLot = 0.01;
+    else if (ticksize != 0 && tickvalue != 0) {
+        MyLot = NormalizeDouble(mybalance / (MySL / ticksize * tickvalue), 2);
+        MyLot = NormalizeDouble(9 * MyLot / 10, 2);
+    }
+    if (MyLot > MaxLot) MyLot = MaxLot;
+    if (MyLot < MinLot) MyLot = MinLot;
+    while (true) {
+        if (AccountFreeMarginCheck(Symbol(), MyOrderType, MyLot) > 0)
+            break;
+        else
+            MyLot = MyLot - Lot_Step;
+        if (MyLot == 0) {
+            MyLot = 0.01;
+            break;
+        }
+    }
+    return MyLot;
+}
+void DeleteAllObjects() {
+    int objs = ObjectsTotal();
+    string name;
+    for (int cnt = objs - 1; cnt >= 0; cnt--) {
+        name = ObjectName(cnt);
+        if (name == "Strategy" || name == "Developer" || name == "OrderTotal") continue;
+        ObjectDelete(name);
+    }
+}
+string split(string yourstring, string yoursplit, int ArrayElement) {
+    //ArrayInitialize(array,EMPTY_VALUE); // ch? dành cho ki?u s? nh? double, int
+    string MyArray[];
+    ushort u_split = StringGetCharacter(yoursplit, 0);
+    StringSplit(yourstring, u_split, MyArray);
+    return MyArray[ArrayElement];
+}
+void DrawText(string name, int bar, color clr, bool Buy = false, bool Sell = false, string text = "") {
+    if (ObjectFind(name) != -1)
+        return;
+    //ObjectDelete(name);
+    if (ObjectFind(name) == -1) {
+        if (Buy == true) {
+            ObjectCreate(name, OBJ_TEXT, 0, Time[bar], iLow(NULL, 0, bar) - (Period() * Point * 0.12));
+            ObjectSetText(name, text, 20);
+            ObjectSet(name, OBJPROP_COLOR, clr);
+        } else if (Sell == true) {
+            ObjectCreate(name, OBJ_TEXT, 0, Time[bar], iHigh(NULL, 0, bar) + (Period() * Point * 0.12));
+            ObjectSetText(name, text, 20);
+            ObjectSet(name, OBJPROP_COLOR, clr);
+        }
+    }
+}
+void DrawVerticalLine(string name, int bar, color clr, bool ArrowBuy = false, bool ArrowSell = false) {
+    if (ObjectFind(name) != -1)
+        //ObjectDelete(name);
+        return;
+    if (ObjectFind(name) == -1) {
+        if (ArrowBuy == false && ArrowSell == false) {
+            ObjectCreate(name, OBJ_VLINE, 0, Time[bar], bar);
+        } else if (ArrowBuy) {
+            ObjectCreate(name, OBJ_ARROW_UP, 0, Time[bar], iLow(NULL, 0, bar) - (Period() * Point * 0));
+        } else if (ArrowSell) {
+            ObjectCreate(name, OBJ_ARROW_DOWN, 0, Time[bar], iHigh(NULL, 0, bar) + (Period() * Point * 0));
+        }
+        ObjectSet(name, OBJPROP_COLOR, clr);
+        //ObjectSet(name, OBJPROP_STYLE, STYLE_DASH);
+        ObjectSet(name, OBJPROP_WIDTH, 1);
+        if (ArrowBuy) ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_TOP);
+        if (ArrowSell) ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_BOTTOM);
+        ObjectSetInteger(0, name, OBJPROP_WIDTH, 3);
+        // WindowRedraw();
+    }
+}
+void CloseAllOrder() {
+    int total;
+    int cnt;
+    while (OrdersTotal() > 0) {
+        // close opened orders first
+        total = OrdersTotal();
+        int ReturnOrderClose;
+        for (cnt = total - 1; cnt >= 0; cnt--) {
+            if (OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES)) {
+                switch (OrderType()) {
+                    case OP_BUY:
+                        ReturnOrderClose = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_BID), 3, Violet);
+                        break;
+                    case OP_SELL:
+                        ReturnOrderClose = OrderClose(OrderTicket(), OrderLots(), MarketInfo(OrderSymbol(), MODE_ASK), 3, Violet);
+                        break;
+                }
+            }
+        }
+        // and close pending
+        total = OrdersTotal();
+        for (cnt = total - 1; cnt >= 0; cnt--) {
+            if (OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES)) {
+                switch (OrderType()) {
+                    case OP_BUYLIMIT:
+                        ReturnOrderClose = OrderDelete(OrderTicket());
+                        break;
+                    case OP_SELLLIMIT:
+                        ReturnOrderClose = OrderDelete(OrderTicket());
+                        break;
+                    case OP_BUYSTOP:
+                        ReturnOrderClose = OrderDelete(OrderTicket());
+                        break;
+                    case OP_SELLSTOP:
+                        ReturnOrderClose = OrderDelete(OrderTicket());
+                        break;
+                }
+            }
+        }
+    }
+}
+void WriteNewFile(string file, string content) {
+    int file_handleWrite = FileOpen(file, FILE_TXT | FILE_CSV | FILE_READ | FILE_WRITE, ",", CP_UTF8);
+    int bRtn = FileSeek(file_handleWrite, 0, SEEK_END);
+    FileWrite(file_handleWrite, content);
+    FileClose(file_handleWrite);
+}
+double GetFibExpansion(int MyOrderType, double top, double bottom, double FibLevel) {
+    double point1, point2, point3;
+    if (MyOrderType) { //Sell
+        point1 = top;
+        point2 = NormalizeDouble(top - (top - bottom) * 90 / 100, Digits);
+        point3 = NormalizeDouble((point1 + point2) / 2, Digits);
+        return GetExpansionLevelFor(point1, point2, point3, FibLevel);
+    } else { //Buy
+        point1 = bottom;
+        point2 = NormalizeDouble(bottom + (top - bottom) * 90 / 100, Digits);
+        point3 = NormalizeDouble((point1 + point2) / 2, Digits);
+        return GetExpansionLevelFor(point1, point2, point3, FibLevel);
+    }
+    return 0;
+}
+double GetExpansionLevelFor(double point1, double point2, double point3, double fibLevel) {
+    double expansionLevel = NormalizeDouble((point3 + fibLevel * (point2 - 1 * point1)), Digits);
+    return (expansionLevel);
+}
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////
+bool EditCreate(const long chart_ID = 0, // chart's ID
+    const string name = "Edit", // object name
+        const int sub_window = 0, // subwindow index
+            const int x = 0, // X coordinate
+                const int y = 0, // Y coordinate
+                    const int width = 50, // width
+                        const int height = 18, // height
+                            const string text = "Text", // text
+                                const string font = "Arial", // font
+                                    const int font_size = 10, // font size
+                                        const ENUM_ALIGN_MODE align = ALIGN_CENTER, // alignment type
+                                            const bool read_only = false, // ability to edit
+                                                const ENUM_BASE_CORNER corner = CORNER_LEFT_UPPER, // chart corner for anchoring
+                                                    const color clr = clrBlack, // text color
+                                                        const color back_clr = clrWhite, // background color
+                                                            const color border_clr = clrNONE, // border color
+                                                                const bool back = false, // in the background
+                                                                    const bool selection = false, // highlight to move
+                                                                        const bool hidden = true, // hidden in the object list
+                                                                            const long z_order = 0) // priority for mouse click
+{
+    //--- reset the error value
+    ResetLastError();
+    //--- create edit field
+    if (!ObjectCreate(chart_ID, name, OBJ_EDIT, sub_window, 0, 0)) {
+        Print(__FUNCTION__,
+            ": failed to create \"Edit\" object! Error code = ", GetLastError());
+        return (false);
+    }
+    //--- set object coordinates
+    ObjectSetInteger(chart_ID, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(chart_ID, name, OBJPROP_YDISTANCE, y);
+    //--- set object size
+    ObjectSetInteger(chart_ID, name, OBJPROP_XSIZE, width);
+    ObjectSetInteger(chart_ID, name, OBJPROP_YSIZE, height);
+    //--- set the text
+    ObjectSetString(chart_ID, name, OBJPROP_TEXT, text);
+    //--- set text font
+    ObjectSetString(chart_ID, name, OBJPROP_FONT, font);
+    //--- set font size
+    ObjectSetInteger(chart_ID, name, OBJPROP_FONTSIZE, font_size);
+    //--- set the type of text alignment in the object
+    ObjectSetInteger(chart_ID, name, OBJPROP_ALIGN, align);
+    //--- enable (true) or cancel (false) read-only mode
+    ObjectSetInteger(chart_ID, name, OBJPROP_READONLY, read_only);
+    //--- set the chart's corner, relative to which object coordinates are defined
+    ObjectSetInteger(chart_ID, name, OBJPROP_CORNER, corner);
+    //--- set text color
+    ObjectSetInteger(chart_ID, name, OBJPROP_COLOR, clr);
+    //--- set background color
+    ObjectSetInteger(chart_ID, name, OBJPROP_BGCOLOR, back_clr);
+    //--- set border color
+    ObjectSetInteger(chart_ID, name, OBJPROP_BORDER_COLOR, border_clr);
+    //--- display in the foreground (false) or background (true)
+    ObjectSetInteger(chart_ID, name, OBJPROP_BACK, back);
+    //--- enable (true) or disable (false) the mode of moving the label by mouse
+    ObjectSetInteger(chart_ID, name, OBJPROP_SELECTABLE, selection);
+    ObjectSetInteger(chart_ID, name, OBJPROP_SELECTED, selection);
+    //--- hide (true) or display (false) graphical object name in the object list
+    ObjectSetInteger(chart_ID, name, OBJPROP_HIDDEN, hidden);
+    //--- set the priority for receiving the event of a mouse click in the chart
+    ObjectSetInteger(chart_ID, name, OBJPROP_ZORDER, z_order);
+    //--- successful execution
+    return (true);
+}
+//+------------------------------------------------------------------+
+//| Move Edit object                                                 |
+//+------------------------------------------------------------------+
+bool EditMove(const long chart_ID = 0, // chart's ID
+    const string name = "Edit", // object name
+        const int x = 0, // X coordinate
+            const int y = 0) // Y coordinate
+{
+    //--- reset the error value
+    ResetLastError();
+    //--- move the object
+    if (!ObjectSetInteger(chart_ID, name, OBJPROP_XDISTANCE, x)) {
+        Print(__FUNCTION__,
+            ": failed to move X coordinate of the object! Error code = ", GetLastError());
+        return (false);
+    }
+    if (!ObjectSetInteger(chart_ID, name, OBJPROP_YDISTANCE, y)) {
+        Print(__FUNCTION__,
+            ": failed to move Y coordinate of the object! Error code = ", GetLastError());
+        return (false);
+    }
+    //--- successful execution
+    return (true);
+}
+//+------------------------------------------------------------------+
+//| Resize Edit object                                               |
+//+------------------------------------------------------------------+
+bool EditChangeSize(const long chart_ID = 0, // chart's ID
+    const string name = "Edit", // object name
+        const int width = 0, // width
+            const int height = 0) // height
+{
+    //--- reset the error value
+    ResetLastError();
+    //--- change the object size
+    if (!ObjectSetInteger(chart_ID, name, OBJPROP_XSIZE, width)) {
+        Print(__FUNCTION__,
+            ": failed to change the object width! Error code = ", GetLastError());
+        return (false);
+    }
+    if (!ObjectSetInteger(chart_ID, name, OBJPROP_YSIZE, height)) {
+        Print(__FUNCTION__,
+            ": failed to change the object height! Error code = ", GetLastError());
+        return (false);
+    }
+    //--- successful execution
+    return (true);
+}
+//+------------------------------------------------------------------+
+//| Change Edit object's text                                        |
+//+------------------------------------------------------------------+
+bool EditTextChange(const long chart_ID = 0, // chart's ID
+    const string name = "Edit", // object name
+        const string text = "Text") // text
+{
+    //--- reset the error value
+    ResetLastError();
+    //--- change object text
+    if (!ObjectSetString(chart_ID, name, OBJPROP_TEXT, text)) {
+        Print(__FUNCTION__,
+            ": failed to change the text! Error code = ", GetLastError());
+        return (false);
+    }
+    //--- successful execution
+    return (true);
+}
+//+------------------------------------------------------------------+
+//| Return Edit object text                                          |
+//+------------------------------------------------------------------+
+bool EditTextGet(string & text, // text
+    const long chart_ID = 0, // chart's ID
+        const string name = "Edit") // object name
+{
+    //--- reset the error value
+    ResetLastError();
+    //--- get object text
+    if (!ObjectGetString(chart_ID, name, OBJPROP_TEXT, 0, text)) {
+        Print(__FUNCTION__,
+            ": failed to get the text! Error code = ", GetLastError());
+        return (false);
+    }
+    //--- successful execution
+    return (true);
+}
+//+------------------------------------------------------------------+
+//| Delete Edit object                                               |
+//+------------------------------------------------------------------+
+bool EditDelete(const long chart_ID = 0, // chart's ID
+    const string name = "Edit") // object name
+{
+    //--- reset the error value
+    ResetLastError();
+    //--- delete the label
+    if (!ObjectDelete(chart_ID, name)) {
+        Print(__FUNCTION__,
+            ": failed to delete \"Edit\" object! Error code = ", GetLastError());
+        return (false);
+    }
+    //--- successful execution
+    return (true);
+}
+void CreatTextbox() {
+    //--- chart window size
+    long x_distance;
+    long y_distance;
+    //--- set window size
+    if (!ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0, x_distance)) {
+        Print("Failed to get the chart width! Error code = ", GetLastError());
+        return;
+    }
+    if (!ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0, y_distance)) {
+        Print("Failed to get the chart height! Error code = ", GetLastError());
+        return;
+    }
+    //--- define the step for changing the edit field
+    //printf("x "+x_distance);
+    //printf("y "+y_distance);
+    int x_step = (int) x_distance / 64;
+    //--- set edit field coordinates and its size
+    int x = (int) x_distance - 120;
+    int y = (int) y_distance - 30;
+    int x_size = (int) x_distance / 8;
+    int y_size = 14 * 2;
+    //--- store the text in the local variable
+    //--- create edit field
+    // EditDelete(0,"TextBox");
+    if (!EditCreate(0, "TextBox", 0, x, y, x_size, y_size, "", "Arial", 10, ALIGN_CENTER, false,
+            CORNER_LEFT_UPPER, clrBlack, clrWhite, clrBlack, false, false, true, 0))
+        return;
+    //  EditTextGet(NULL,NULL,"TextBox");
+    //printf(ObjectGetString(NULL,"TextBox",OBJPROP_TEXT,0));
+    //--- redraw the chart and wait for 1 second
+    ChartRedraw();
+    Sleep(1000);
+    //--- stretch the edit field
+}
+//////////////////////////////////////////////////////////////////////////////////////////////////
+void OnChartEvent(const int id,
+    const long & lparam,
+        const double & dparam,
+            const string & sparam) {
+    ResetLastError();
+    if (id == CHARTEVENT_OBJECT_CLICK) {
+        if (ObjectType(sparam) == OBJ_BUTTON) {
+            ButtonPressed(0, sparam);
+        }
+    }
+}
+void CreateButtons() {
+    int Corner = 0;
+    int Move_X = 0;
+    int Move_Y = 0;
+    string B00000 = "============";
+    string Font_Type = "Arial Bold";
+    color Font_Color = White;
+    int Font_Size = 10;
+    string B00001 = "============";
+    int Button_Width = 120;
+    color Button_Color = Navy;
+    color Button_Border = Navy;
+    int Button_Height = Font_Size * 4;
+    //////////////////////
+    long x_distance;
+    long y_distance;
+    //--- set window size
+    if (!ChartGetInteger(0, CHART_WIDTH_IN_PIXELS, 0, x_distance)) {
+        Print("Failed to get the chart width! Error code = ", GetLastError());
+        return;
+    }
+    if (!ChartGetInteger(0, CHART_HEIGHT_IN_PIXELS, 0, y_distance)) {
+        Print("Failed to get the chart height! Error code = ", GetLastError());
+        return;
+    }
+    //--- define the step for changing the button size
+    int x_step = (int) x_distance / 32;
+    int y_step = (int) y_distance / 32;
+    //--- set the button coordinates and its size
+    int x = (int) x_distance - 250;
+    int y = (int) y_distance - 40;
+    if (!ButtonCreate(0, ButtonName, 0, x, y, Button_Width, Button_Height, Corner, "Time", Font_Type, Font_Size, Font_Color, Button_Color, Button_Border)) return;
+    ChartRedraw();
+}
+void DeleteButtons() {
+    ButtonDelete(0, ButtonName);
+}
+void ButtonPressed(const long chartID,
+    const string sparam) {
+    ObjectSetInteger(chartID, sparam, OBJPROP_BORDER_COLOR, Black);
+    ChartRedraw();
+    if (sparam == ButtonName) View(sparam);
+    Sleep(100);
+    ObjectSetInteger(0, sparam, OBJPROP_BORDER_COLOR, Silver);
+    ChartRedraw();
+}
+void ToolTips_Text(const string sparam) {
+    if (sparam == ButtonName) {
+        ObjectSetString(0, sparam, OBJPROP_TOOLTIP, "View date in Textbox");
+    }
+}
+int View(const string sparam) {
+    string Mytime = ObjectGetString(NULL, "TextBox", OBJPROP_TEXT, 0);
+    //printf( Mytime);
+    ObjectSetString(NULL, "TextBox", OBJPROP_TEXT, Mytime);
+    if (Mytime != "") {
+        ChartNavigate(ChartID(), CHART_BEGIN, Bars - iBarShift(NULL, 0, StrToTime(StringTrimRight(StringTrimLeft(Mytime))) - 86400));
+    }
+    ChartRedraw();
+    return 0;
+}
+bool ButtonCreate(const long chart_ID = 0,
+    const string name = "Button",
+        const int sub_window = 0,
+            const int x = 0,
+                const int y = 0,
+                    const int width = 500,
+                        const int height = 18,
+                            int corner = 0,
+                            const string text = "Button",
+                                const string font = "Arial Bold",
+                                    const int font_size = 10,
+                                        const color clr = clrBlack,
+                                            const color back_clr = White,
+                                                const color border_clr = clrNONE,
+                                                    const bool state = false,
+                                                        const bool back = false,
+                                                            const bool selection = false,
+                                                                const bool hidden = true,
+                                                                    const long z_order = 0) {
+    ResetLastError();
+    if (!ObjectCreate(chart_ID, name, OBJ_BUTTON, sub_window, 0, 0)) {
+        Print(__FUNCTION__, ": Unable to create the button! Error code = ", GetLastError());
+        return (false);
+    }
+    ObjectSetInteger(chart_ID, name, OBJPROP_XDISTANCE, x);
+    ObjectSetInteger(chart_ID, name, OBJPROP_YDISTANCE, y);
+    ObjectSetInteger(chart_ID, name, OBJPROP_XSIZE, width);
+    ObjectSetInteger(chart_ID, name, OBJPROP_YSIZE, height);
+    ObjectSetInteger(chart_ID, name, OBJPROP_CORNER, corner);
+    ObjectSetInteger(chart_ID, name, OBJPROP_FONTSIZE, font_size);
+    ObjectSetInteger(chart_ID, name, OBJPROP_COLOR, clr);
+    ObjectSetInteger(chart_ID, name, OBJPROP_BGCOLOR, back_clr);
+    ObjectSetInteger(chart_ID, name, OBJPROP_BORDER_COLOR, border_clr);
+    ObjectSetInteger(chart_ID, name, OBJPROP_BACK, false);
+    ObjectSetInteger(chart_ID, name, OBJPROP_STATE, state);
+    ObjectSetInteger(chart_ID, name, OBJPROP_SELECTABLE, selection);
+    ObjectSetInteger(chart_ID, name, OBJPROP_SELECTED, selection);
+    ObjectSetInteger(chart_ID, name, OBJPROP_HIDDEN, hidden);
+    ObjectSetInteger(chart_ID, name, OBJPROP_ZORDER, z_order);
+    ObjectSetString(chart_ID, name, OBJPROP_TEXT, text);
+    ObjectSetString(chart_ID, name, OBJPROP_FONT, font);
+    return (true);
+}
+bool ButtonDelete(const long chart_ID = 0,
+    const string name = "Button") {
+    ResetLastError();
+    if (!ObjectDelete(chart_ID, name)) {
+        Print(__FUNCTION__, ": Unable to delete the button! Error code = ", GetLastError());
+        return (false);
+    }
+    return (true);
+}
